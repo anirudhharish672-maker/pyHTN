@@ -1,5 +1,0 @@
-anthropic
-requests
-pyyaml
-git+https://github.com/cmaclell/py_search.git
-git+https://github.com/cmaclell/py_plan.git
