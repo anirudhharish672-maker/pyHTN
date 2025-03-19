@@ -1,12 +1,18 @@
 import pytest
 from copy import deepcopy
-from shop2.domain import Task, Method, Operator
-from shop2.fact import Fact
-from shop2.conditions import AND, OR, NOT, Filter
-from shop2.common import V
-from shop2.exceptions import StopException, FailedPlanException
 
-from node_planner import NodePlanner, PlanNode
+import sys
+import os
+
+# Add the parent directory to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
+from py_htn.domain import Task, Method, Operator
+from py_htn.fact import Fact
+from py_htn.conditions import AND, OR, NOT, Filter
+from py_htn.common import V
+from py_htn.exceptions import StopException, FailedPlanException
+from py_htn.planner import HtnPlanner, PlanNode
 
 
 # Mock agent for testing
@@ -173,32 +179,31 @@ def deliver_tasks():
 @pytest.fixture
 def mock_agent():
     """Create a mock agent for testing"""
-    agent = MockAgent()
-    return agent
+    return MockAgent()
 
 
 @pytest.fixture
-def node_planner(robot_domain, deliver_tasks, mock_agent, initial_state):
+def planner(robot_domain, deliver_tasks, mock_agent, initial_state):
     """Create a NodePlanner instance for testing"""
-    planner = NodePlanner(tasks=deliver_tasks, domain=robot_domain, agent=mock_agent)
+    planner = HtnPlanner(tasks=deliver_tasks, domain=robot_domain, agent=mock_agent, logging=True)
     mock_agent.env.state = deepcopy(initial_state)
     planner.update_state(initial_state)
     return planner
 
 
 # Tests
-def test_planner_initialization(node_planner, deliver_tasks):
+def test_planner_initialization(planner, deliver_tasks):
     """Test that the planner initializes correctly"""
-    assert len(node_planner.root_tasks) == 1
-    assert node_planner.root_tasks[0].content.name == "deliver_item"
-    assert len(node_planner.root_tasks[0].content.args) == 2
-    assert node_planner.root_tasks[0].content.args[0] == "book"
-    assert node_planner.root_tasks[0].content.args[1] == "bedroom"
+    assert len(planner.root_tasks) == 1
+    assert planner.root_tasks[0].content.name == "deliver_item"
+    assert len(planner.root_tasks[0].content.args) == 2
+    assert planner.root_tasks[0].content.args[0] == "book"
+    assert planner.root_tasks[0].content.args[1] == "bedroom"
 
 
-def test_get_next_decomposition(node_planner):
+def test_get_next_decomposition(planner):
     """Test that get_next_decomposition returns valid options"""
-    decomposition = node_planner.get_next_decomposition()
+    decomposition = planner.get_next_decomposition()
 
     assert 'task_node' in decomposition
     assert 'options' in decomposition
@@ -206,70 +211,71 @@ def test_get_next_decomposition(node_planner):
     assert decomposition['task_node'].content.name == "deliver_item"
 
 
-def test_apply_method(node_planner):
+def test_apply_method(planner):
     """Test applying a method to a task"""
-    decomposition = node_planner.get_next_decomposition()
+    decomposition = planner.get_next_decomposition()
     task_node = decomposition['task_node']
 
     # Apply the deliver_item method
-    result = node_planner.apply(task_node.id, 0)
+    result = planner.apply(task_node.id, 0)
 
     assert result['node_type'] == 'method'
     assert result['name'] == 'deliver_item'
     assert len(result['subtask_ids']) == 3  # Should create 3 subtasks
 
     # Check that tracking info is updated
-    assert node_planner.planning_depth > 0
-    assert len(node_planner.current_task_path) > 1
-    assert node_planner.last_decomposition['type'] == 'method'
-    assert node_planner.last_decomposition['applied'] == 'deliver_item'
+    assert planner.planning_depth > 0
+    assert len(planner.current_task_path) > 1
+    assert planner.last_decomposition['type'] == 'method'
+    assert planner.last_decomposition['applied'] == 'deliver_item'
 
 
-def test_apply_operator(node_planner):
+def test_apply_operator(planner):
     """Test applying an operator"""
     # First set up the state to have a valid operator
-    decomposition = node_planner.get_next_decomposition()
+    decomposition = planner.get_next_decomposition()
     task_node = decomposition['task_node']
 
     # Apply the deliver_item method
-    method_result = node_planner.apply(task_node.id, 0)
+    method_result = planner.apply(task_node.id, 0)
 
     # Apply the get_item method
     next_task_id = method_result['next_task_id']
-    method_result = node_planner.apply(next_task_id, 0)
+    method_result = planner.apply(next_task_id, 0)
 
     # Now we should have a move operator as the next task
     next_task_id = method_result['next_task_id']
 
     # Get decomposition for the move task
-    decomposition = node_planner.get_next_decomposition(next_task_id)
+    decomposition = planner.get_next_decomposition(next_task_id)
 
     # Apply the move operator
-    result = node_planner.apply(next_task_id, 0)
+    result = planner.apply(next_task_id, 0)
 
     assert result['node_type'] == 'operator'
     assert result['name'] == 'move'
 
     # Check that the agent executed the action
-    assert node_planner.agent.env.execution_log[-1] == 'move'
+    assert planner.agent.env.execution_log[-1] == 'move'
 
     # Check that tracking info is updated
-    assert 'move' in node_planner.get_current_operator_trace()
-    assert len(node_planner.execution_history) > 0
+    assert 'move' in planner.get_current_operator_trace()
+    assert len(planner.execution_history) > 0
 
 
-def test_complete_plan(node_planner, mock_agent, initial_state):
+def test_complete_plan(planner, mock_agent, initial_state):
     """Test the complete planning and execution process"""
     # Reset the state
     mock_agent.env.state = deepcopy(initial_state)
     mock_agent.env.execution_log = []
-    node_planner.update_state(initial_state)
+    planner.update_state(initial_state)
 
     # Run the full plan
-    plan = node_planner.plan(initial_state)
+    plan = planner.plan(initial_state)
 
-    # Check that the plan is complete
+    # Check that operators were executed in the plan
     assert len(plan) > 0
+    print(plan)
 
     # Check that all actions were executed
     expected_actions = ['move', 'pickup', 'move', 'drop']
@@ -284,75 +290,75 @@ def test_complete_plan(node_planner, mock_agent, initial_state):
     assert book_fact['location'] == 'bedroom'
 
 
-def test_tracking_info(node_planner, initial_state):
+def test_tracking_info(planner, initial_state):
     """Test that tracking information is maintained correctly"""
     # Reset state
-    node_planner.update_state(initial_state)
+    planner.update_state(initial_state)
 
     # Step through the plan
-    decomposition = node_planner.get_next_decomposition()
+    decomposition = planner.get_next_decomposition()
     task_node = decomposition['task_node']
 
     # Apply the deliver_item method
-    result = node_planner.apply(task_node.id, 0)
+    result = planner.apply(task_node.id, 0)
 
     # Check tracking info after method application
-    assert len(node_planner.current_task_path) > 0
-    assert node_planner.planning_depth > 0
-    assert len(node_planner.execution_history) == 1
-    assert node_planner.execution_history[0]['type'] == 'method'
+    assert len(planner.current_task_path) > 0
+    assert planner.planning_depth > 0
+    assert len(planner.execution_history) == 1
+    assert planner.execution_history[0]['type'] == 'method'
 
     # Apply the get_item method
     next_task_id = result['next_task_id']
-    result = node_planner.apply(next_task_id, 0)
+    result = planner.apply(next_task_id, 0)
 
     # Check tracking info after second method
-    assert len(node_planner.execution_history) == 2
-    assert node_planner.get_current_method_trace() != "No methods applied yet"
+    assert len(planner.execution_history) == 2
+    assert planner.get_current_method_trace() != "No methods applied yet"
 
     # Apply move operator
     next_task_id = result['next_task_id']
-    result = node_planner.apply(next_task_id, 0)
+    result = planner.apply(next_task_id, 0)
 
     # Check tracking after operator
-    assert len(node_planner.execution_history) == 3
-    assert node_planner.get_current_operator_trace() != "No operators applied yet"
+    assert len(planner.execution_history) == 3
+    assert planner.get_current_operator_trace() != "No operators applied yet"
 
     # Check task hierarchy
-    hierarchy = node_planner.get_task_hierarchy_string()
+    hierarchy = planner.get_task_hierarchy_string()
     assert "deliver_item" in hierarchy
     assert "get_item" in hierarchy
     assert "pickup" in hierarchy  # Should be the current task
 
 
-def test_error_handling(node_planner):
+def test_error_handling(planner):
     """Test error handling for invalid inputs"""
     # Test with non-existent task ID
     with pytest.raises(ValueError):
-        node_planner.apply("nonexistent-id", 0)
+        planner.apply("nonexistent-id", 0)
 
     # Test with invalid method/operator index
-    decomposition = node_planner.get_next_decomposition()
+    decomposition = planner.get_next_decomposition()
     task_node = decomposition['task_node']
 
     with pytest.raises(ValueError):
-        node_planner.apply(task_node.id, 999)  # Invalid index
+        planner.apply(task_node.id, 999)  # Invalid index
 
 
-def test_visualization(node_planner, initial_state):
+def test_visualization(planner, initial_state):
     """Test the visualization functionality"""
     # Reset state
-    node_planner.update_state(initial_state)
+    planner.update_state(initial_state)
 
     # Run a partial plan
-    decomposition = node_planner.get_next_decomposition()
+    decomposition = planner.get_next_decomposition()
     task_node = decomposition['task_node']
 
     # Apply the deliver_item method
-    result = node_planner.apply(task_node.id, 0)
+    result = planner.apply(task_node.id, 0)
 
     # Get visualization
-    viz = node_planner.visualize()
+    viz = planner.visualize()
 
     # Basic checks on visualization output
     assert viz

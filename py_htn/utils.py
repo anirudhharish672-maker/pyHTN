@@ -2,7 +2,7 @@ from itertools import chain, permutations
 from operator import or_
 from typing import List, Tuple, Set, Dict, Union
 from py_plan.unification import execute_functions
-from shop2.domain import Task
+from py_htn.domain import Task
 
 
 

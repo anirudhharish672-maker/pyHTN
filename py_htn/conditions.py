@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 from itertools import chain
-from shop2.common import V
+from py_htn.common import V
 
 if TYPE_CHECKING:
     from typing import List

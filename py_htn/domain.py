@@ -9,14 +9,14 @@ from py_plan.unification import is_variable, unify_var
 from py_plan.unification import execute_functions
 from py_plan.pattern_matching import build_index, pattern_match
 from py_plan.unification import unify
-from shop2.fact import Fact
-from shop2.conditions import AND, OR, NOT, Filter
-from shop2.common import V
+from py_htn.fact import Fact
+from py_htn.conditions import AND, OR, NOT, Filter
+from py_htn.common import V
 
 
 class Axiom:
     """
-    As defined for Axiom in domain description of SHOP2
+    As defined for Axiom in domain description of py_htn
     """   
     def __init__(self, head, conditions=list()):
         self.head = head
@@ -40,7 +40,7 @@ class Axiom:
 
 class Method:
     """
-    As defined for Method in domain description of SHOP2
+    As defined for Method in domain description of py_htn
     """
     def __init__(self, head, preconditions, subtasks, unless_conditions=(), cost=1):
         self.id = str(uuid4()).replace('-', '')
@@ -94,7 +94,7 @@ class Method:
 
 class Operator:
     """
-    As defined for Operator in domain description of SHOP2
+    As defined for Operator in domain description of py_htn
     """
     def __init__(self, head, preconditions, effects, unless_conditions=(), cost=1):
         self.id = str(uuid4()).replace('-', '')

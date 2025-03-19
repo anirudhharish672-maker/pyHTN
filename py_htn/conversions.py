@@ -1,7 +1,7 @@
 from typing import Union
-from shop2.conditions import AND
-from shop2.conditions import OR
-from shop2.fact import Fact
+from py_htn.conditions import AND
+from py_htn.conditions import OR
+from py_htn.fact import Fact
 
 
 def logics_to_dicts_and_tuples(expression: (AND, OR)) -> (list, tuple):
