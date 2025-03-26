@@ -1,14 +1,6 @@
-from __future__ import annotations
-from typing import TYPE_CHECKING
 from itertools import chain
-from py_htn.common import V
-
-if TYPE_CHECKING:
-    from typing import List
-    from typing import Union
-    from typing import Tuple
-    from typing import Callable
-    from typing import Hashable
+from py_htn.domain.variable import V
+from py_htn.common.imports.typing import *
 
 
 class ConditionalElement():
@@ -24,7 +16,7 @@ class ConditionalList(tuple):
     A conditional that consists of a list of other conditionals.
     """
 
-    def __new__(cls, *args: List[Union[ConditionalList, ConditionalElement]]):
+    def __new__(cls, *args: List[Union['ConditionalList', ConditionalElement]]):
         return super().__new__(cls, args)
 
     def __repr__(self):
@@ -39,7 +31,7 @@ class ComposableCond:
     A Mixin for making a conditional compositional using bitwise operators.
     """
 
-    def __and__(self, other: ComposableCond):
+    def __and__(self, other: 'ComposableCond'):
         if isinstance(self, AND) and isinstance(other, NOT) and (~other in self):
             return AND(*[x for x in self if x != ~other])
         if isinstance(self, AND) and isinstance(other, AND):
@@ -51,14 +43,14 @@ class ComposableCond:
         else:
             return AND(self, other)
     
-    def __sub__(self, other: ComposableCond):
+    def __sub__(self, other: 'ComposableCond'):
         rm = []
         for x in self:
             if x != other:
                 rm.append(x)
         return AND(*rm)
     
-    def __or__(self, other: ComposableCond):
+    def __or__(self, other: 'ComposableCond'):
         if isinstance(self, OR) and isinstance(other, OR):
             return OR(*[x for x in chain(self, other)]) 
         elif isinstance(self, OR):

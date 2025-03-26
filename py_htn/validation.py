@@ -42,24 +42,19 @@ def validate_tasks(task_list: List[Union[str, Tuple, Dict]]) -> None:
 
         # Validate dictionary format
         elif isinstance(task_item, dict):
-            if 'task' not in task_item:
-                raise ValueError("Dictionary task must contain 'task' key")
+            if 'name' not in task_item:
+                raise ValueError("Dictionary task must contain 'name' key")
 
-            task_spec = task_item['task']
+            task_spec = task_item['name']
 
             # Validate task specification in dictionary
             if isinstance(task_spec, str):
                 if not task_spec:
                     raise ValueError("Task string in dictionary cannot be empty")
-            elif isinstance(task_spec, tuple):
-                if not task_spec:
-                    raise ValueError("Task tuple in dictionary cannot be empty")
-                if not isinstance(task_spec[0], str):
-                    raise ValueError("First element of task tuple must be a string")
             else:
-                raise ValueError(f"Task in dictionary must be string or tuple, got {type(task_spec)}")
+                raise ValueError(f"Task in dictionary must be string, got {type(task_spec)}")
 
-            priority_levels = [0, 1, 2, 3, 'first', 'high', 'medium', 'low']
+            priority_levels = ['first', 'high', 'medium', 'low']
             # Validate priority if present
             if 'priority' in task_item and task_item['priority'] not in priority_levels:
                 raise ValueError(

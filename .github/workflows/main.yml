@@ -1,23 +1,33 @@
-name: Build
+name: Python Tests
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ planner_updates ]
+  pull_request:
+    branches: [ planner_updates ]
 
 jobs:
-  build:
-
+  test:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        python-version: [3.8, 3.9, 3.11]
+        python-version: ['3.13']
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
+
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
+
     - name: Install dependencies
-      run: pip install git+https://github.com/Teachable-AI-Lab-TAIL/shop2.git@facts
-    - name: Run script
-      run: python run.py
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        # If you have a dev/test requirements file, install it too
+        if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+    - name: Run tests
+      run: |
+        python -m pytest -v tests/

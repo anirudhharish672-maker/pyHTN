@@ -2,23 +2,27 @@ from itertools import chain, permutations
 from operator import or_
 from typing import List, Tuple, Set, Dict, Union
 from py_plan.unification import execute_functions
-from py_htn.domain import Task
+
+from py_htn.domain.task import NetworkTask, GroundedTask
+
+
+# from py_htn.domain import BaseTask
 
 
 
-        
-def removeTask(T: Union[List, Tuple], task: Task) -> Union[List, Tuple]:
+
+def remove_task(T: Union[List, Tuple], task: Union[NetworkTask, GroundedTask]) -> Union[List, Tuple]:
     """
     Remove task from the list or tuple T.
     """
     if isinstance(T, list):
-        return [result for t in T if (result := removeTask(t, task)) != task and result]
+        return [result for t in T if (result := remove_task(t, task)) != task and result]
     elif isinstance(T, tuple):
-        return tuple(result for t in T if (result := removeTask(t, task)) != task and result)
+        return tuple(result for t in T if (result := remove_task(t, task)) != task and result)
     else: 
         return T
 
-def addTask(x: Union[List, Tuple], y: Union[List, Tuple]) -> Union[List, Tuple]:
+def add_task(x: Union[List, Tuple], y: Union[List, Tuple]) -> Union[List, Tuple]:
     """
     Add task(s) x to the front of the list or tuple y.
     """
@@ -27,7 +31,7 @@ def addTask(x: Union[List, Tuple], y: Union[List, Tuple]) -> Union[List, Tuple]:
     elif isinstance(y, tuple):
         return (x,) + y
          
-def replaceTask(T: Union[List, Tuple, Task], task: Task, ntask: Task) -> Union[List, Tuple, Task]:
+def replaceTask(T: Union[List, Tuple, BaseTask], task: BaseTask, ntask: BaseTask) -> Union[List, Tuple, BaseTask]:
     """
     Replace task with ntask in T.
     """
@@ -38,14 +42,6 @@ def replaceTask(T: Union[List, Tuple, Task], task: Task, ntask: Task) -> Union[L
     else: 
         return ntask if T.head == task.head else T
 
-def replaceHead(tasks: Union[List, Tuple, Task]) -> Union[List, Tuple]:
-    """
-    Replaces the all tasks in  the structure (of lists and tuples) with just the head of the task.
-    """
-    if isinstance(tasks, Task):
-        return tasks.head
-    else:
-        return type(tasks)([replaceHead(task) for task in tasks])
 
 def execute_functions(fun, s=()):
     """
@@ -76,27 +72,3 @@ def execute_functions(fun, s=()):
 
     return fun
 
-def generatePermute(initial_list):
-    all_permutations = [initial_list]
-    for idx, ele in enumerate(initial_list):
-        if isinstance(ele, (list, tuple)):
-            ele_permutations = generatePermute(ele)
-            inner_all_permutations = list()
-            for eperm in ele_permutations:
-                for perm in all_permutations:
-                    temp_initial_list = list(perm)
-                    temp_initial_list[idx] = eperm
-                    temp_initial_list = type(perm)(temp_initial_list)
-                    if temp_initial_list not in all_permutations: 
-                        inner_all_permutations.append(temp_initial_list)
-            all_permutations.extend(inner_all_permutations)
-    
-    if isinstance(initial_list, list):
-        return all_permutations
-    
-    elif isinstance(initial_list, tuple):
-        final_all_permutations = list()
-        for aperm in all_permutations:
-            for pperm in permutations(aperm):
-                final_all_permutations.append(pperm)
-        return final_all_permutations
