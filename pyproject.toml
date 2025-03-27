@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "PyHTN"
+version = "2.0"
+description = "A Python implementation of an HTN planner."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Glen Smith", email = "glensmith[at]gatech(dot)edu"},
+    {name = "Momin N. Siddiqui", email = ""}
+    # Add more authors here as needed
+]
+dependencies = [
+    "requests>=2.32.3",
+    "pyyaml>=6.0.2",
+    "tabulate>=0.9.0",
+    "anthropic>=0.38.0",
+    "websockets==15.0.1",
+    "asyncio==3.4.3",
+    "py_search @ git+https://github.com/cmaclell/py_search.git",
+    "py_plan @ git+https://github.com/cmaclell/py_plan.git",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-cov>=6.0.0",
+]
+
+[tool.setuptools]
+packages = ["py_htn"]

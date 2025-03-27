@@ -13,10 +13,11 @@ def msubst(theta: Dict, tasks: Union[Any, List, Tuple]) -> Union[Any, List, Tupl
     """
     if not isinstance(tasks, (list, tuple)):
         s = subst(theta, tasks.head)
+
+        result = {'name': s[0], 'args': s[1:], 'type': tasks.type}
         if tasks.type == 'operator':
-            return tasks.grounded_operator_class(name=s[0], args=s[1:], effects=tasks.effects)
-        else:
-            return tasks.grounded_task_class(name=s[0], args=s[1:])
+            result['effects'] = tasks.effects
+        return result
     else:
         return type(tasks)([msubst(theta, task) for task in tasks])
 
@@ -36,7 +37,7 @@ def unify(x, y, s=(), check=False):
     """
     Unify expressions x and y given a provided mapping (s).  By default s is
     (), which gets recognized and replaced with an empty dictionary. Return a
-    mapping (a dict) that will make x and y equal or, if this is not possible,
+    mapping (dict) that will make x and y equal or, if this is not possible,
     then it returns None.
 
     >>> unify(('Value', '?a', '8'), ('Value', 'cell1', '8'), {})

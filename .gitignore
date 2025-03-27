@@ -163,6 +163,8 @@ $RECYCLE.BIN/
 # Project specific
 # Add project-specific ignore patterns here
 logs/
+planner_logs/
+test_logs/
 output/
 results/
 .env.local

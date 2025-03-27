@@ -96,7 +96,7 @@ class Cursor:
         """
         Print the current state of the cursor in a readable format.
         """
-        print("========== CURSOR STATE ==========")
+        print("\n========== CURSOR STATE ==========")
 
         if self.current_task:
             print(f"Current Task: {self.current_task.name} (Status: {self.current_task.status})")
@@ -123,7 +123,7 @@ class Cursor:
             if len(self.stack) > 3:
                 print(f"  ... and {len(self.stack) - 3} more")
 
-        print("==================================")
+        print("==================================\n")
 
 
 class TaskManager:
@@ -190,11 +190,10 @@ class HtnPlanner:
                  validate_input: bool = False,
                  repeat_wait_time: int = 5,
                  order_by_cost: bool = False,
-                 logging: bool = False,
+                 enable_logging: bool = False,
                  log_dir: str = None,
                  log_level: int = logging.INFO,
-                 console_output: bool = False,
-                 visualize: bool = False):
+                 console_output: bool = False):
         """Initialize the HTN planner."""
         # Validate inputs if requested
         if validate_input:
@@ -202,21 +201,22 @@ class HtnPlanner:
             validate_tasks(tasks)
 
         # Initialize instance variables
-        self.state = None
+        self.env = env
+        self.state = self.env.get_state()
         self.root_tasks = []
         # Replace plan_list with trace
         self.trace = Trace()
-        self.env = env
+
 
         # Planning options
         self.validate = validate_input
         self.repeat_wait_time = repeat_wait_time
         self.order_by_cost = order_by_cost
-        self.enable_logging = logging
+        self.enable_logging = enable_logging
 
         # Setup logger
         if self.enable_logging:
-            log_file = log_dir if log_dir is not None else 'logs/htn_planner.log'
+            log_file = log_dir if log_dir is not None else 'planner_logs/planner_log.log'
             self.logger = PlannerLogger(log_file, log_level, console_output)
             self.logger.info("HTN Planner initialized")
         else:
@@ -239,6 +239,11 @@ class HtnPlanner:
 
         if self.enable_logging:
             self.logger.info(f"Added {len(self.root_tasks)} root tasks")
+
+    def reset(self):
+        self.trace = Trace()
+        self.cursor = Cursor()
+        self.root_tasks = []
 
     def clear_tasks(self):
         """Clear all tasks."""
@@ -266,36 +271,6 @@ class HtnPlanner:
             tasks = [tasks]
         self._add_tasks(tasks)
 
-    def get_next_decomposition(self):
-
-        # TODO if tasks have been cleared, return error
-        pass
-
-    def apply(self):
-        pass
-
-    def visualize(self, format: str = 'domain') -> None:
-        """Visualize the planner network."""
-        strings = []
-        tab = '\t'
-        header = "PLANNER NETWORK"
-        border = '#' * (len(header) + 4)
-        print(border)
-        print('# ' + header + ' #')
-        print(border + '\n')
-
-        for task_key, methods in self.domain_network.items():
-            task_name, num_args = task_key.split("/")
-            strings.append(0 * tab + f'Task({task_name}, num_args={num_args})')
-
-            for method in methods:
-                strings.append(1 * tab + f'Method({method.name}, args={method.args})')
-                for subtask in method.subtasks:
-                    strings.append(2 * tab + f'{subtask.type.title()}({subtask.name}, args={subtask.args})')
-        for s in strings:
-            print(s)
-        print('\n')
-
     def get_current_plan(self):
         """Gets the current plan."""
         return self.trace.get_current_plan()
@@ -321,7 +296,53 @@ class HtnPlanner:
         """
         return self.trace.print_trace(include_states)
 
-    def plan(self) -> List:
+    def print_network(self, format: str = 'domain') -> None:
+        """
+        Visualize the planner network.
+        :param format:
+        :return: None
+        """
+        strings = []
+        tab = '\t'
+        header = "PLANNER NETWORK"
+        border = '#' * (len(header) + 4)
+        print(border)
+        print('# ' + header + ' #')
+        print(border + '\n')
+
+        for task_key, methods in self.domain_network.items():
+            task_name, num_args = task_key.split("/")
+            strings.append(0 * tab + f'Task({task_name}, num_args={num_args})')
+
+            for method in methods:
+                strings.append(1 * tab + f'Method({method.name}, args={method.args})')
+                for subtask in method.subtasks:
+                    strings.append(2 * tab + f'{subtask.type.title()}({subtask.name}, args={subtask.args})')
+        for s in strings:
+            print(s)
+        print('\n')
+
+    def print_planner_state(self):
+        print("===== PLANNER STATE =====")
+        print(f"Root tasks: {len(self.root_tasks)}")
+        if self.root_tasks:
+            for i, task in enumerate(self.root_tasks):
+                print(f"  Task {i}: {task.name} (status: {task.status})")
+
+        print(f"Current task: {self.cursor.current_task.name if self.cursor.current_task else None}")
+        print(f"Current method: {self.cursor.current_method.name if self.cursor.current_method else None}")
+        print(f"Current subtask index: {self.cursor.current_subtask_index}")
+        print(f"Available methods: {len(self.cursor.available_methods)}")
+        print(f"Current method index: {self.cursor.current_method_index}")
+        print(f"Stack depth: {len(self.cursor.stack)}")
+
+        print(f"Trace entries: {len(self.trace.entries)}")
+        for i, entry in enumerate(self.trace.entries[-5:]):  # Show last 5 entries
+            print(f"  Entry {i}: type={entry.entry_type}")
+
+        print("=========================")
+
+    def plan(self, interactive: bool = False) -> List:
         """
         Execute the planning process.
         :return: The complete plan.
@@ -335,9 +356,6 @@ class HtnPlanner:
 
         if self.enable_logging:
             self.logger.info("Starting automated planning")
-
-        # Clear existing trace
-        self.trace = Trace()
 
         if not self.root_tasks:
             if self.enable_logging:
@@ -368,6 +386,9 @@ class HtnPlanner:
                                     if self.enable_logging:
                                         self.logger.error("No valid plan found")
                                     raise FailedPlanException("No valid plan found")
+                        else:
+                            if interactive:
+                                return self.trace.get_current_plan()
                     else:
                         # Task completed at root level, move to next task
                         self.cursor.current_task = None
@@ -418,6 +439,112 @@ class HtnPlanner:
             self.logger.info(f"Final plan: {', '.join(plan_names)}")
 
         return self.trace.get_current_plan()
+
+    def get_next_decomposition(self):
+        """
+        Steps to the next applicable method for a task.
+        :return: The current task and method
+        {
+            'method': The current applicable method (or None if no more methods),
+            'is_last': Boolean indicating if this is the last applicable method,
+            'method_index': Current method index,
+            'total_methods': Total number of applicable methods
+        }
+        """
+
+        # Clear trace
+        # self.trace = Trace()
+
+        if not self.cursor.current_task or self.cursor.current_task.status == 'succeeded':
+            if not self._set_cursor_to_new_task():
+                return self.cursor.current_task, None
+
+        if self.enable_logging:
+            self.logger.info(f"Getting the next applicable method for task ({self.cursor.current_task.name})")
+
+        # No more methods
+        if self.cursor.current_method_index >= len(self.cursor.available_methods):
+            if self.enable_logging:
+                self.logger.info(f"All methods for task ({self.cursor.current_task.name}) have been returned."
+                                  f" No remaining methods.")
+            return self.cursor.current_task, None
+
+        # Get next method
+        method = self.cursor.available_methods[self.cursor.current_method_index]
+        self.cursor.current_method = method
+
+
+        # Add to trace
+        self.trace.add_method(
+            self.cursor.current_task,
+            method,
+            f"Method #{self.cursor.current_method_index + 1} shown during interactive stepping"
+        )
+
+        # Advance to next method for next call
+        self.cursor.current_method_index += 1
+
+        if self.enable_logging:
+            self.logger.info(f"Providing method: {method.name} for task {self.cursor.current_task.name}")
+
+        return self.cursor.current_task, method
+
+    def _set_cursor_to_new_task(self):
+        next_task = self.root_tasks.pop(0)
+        if self.enable_logging:
+            self.logger.info(f"Moving on to new task: ({next_task.name})")
+        # Handle repeat tasks
+        if next_task.repeat > 0:
+            next_task.repeat -= 1
+            self.root_tasks.insert(0, next_task)
+        self.cursor.set_task(next_task)
+        # Get and store applicable methods
+        methods = self._get_applicable_methods()
+        if not methods:
+            if self.enable_logging:
+                self.logger.info(f"No applicable methods found for task: ({self.cursor.current_task.name})")
+            return False
+
+        self.cursor.available_methods = methods
+        self.cursor.current_method_index = 0
+        return True
+
+    def apply(self, task: GroundedTask, method_to_apply):
+        """
+        Steps to the next subtask of a method.
+        :param method_to_apply:
+        :return: The method to execute
+        """
+
+        if not self.cursor.current_task:
+            self.cursor.current_task = task
+            self.cursor.available_methods.append(method_to_apply)
+            self.cursor.current_method_index = 0
+            self.cursor.current_method = method_to_apply
+            self.cursor.current_subtask_index = 0
+
+        # Add to trace
+        self.trace.add_method(
+            self.cursor.current_task,
+            method_to_apply,
+            f"Applying subtasks of method ({method_to_apply.name})"
+        )
+
+        method = None
+        # Locate method in network
+        for m in self.domain_network[self.cursor.current_task.domain_key]:
+            if m.id == method_to_apply.id:
+                method = m
+                break
+
+        # Set cursor to this method
+        self.cursor.available_methods.append(method)
+        self.cursor.current_method = method
+        self.cursor.current_subtask_index = 0
+        self.cursor.current_method_index = 0
+
+        return self.plan(interactive=True)
+
 
     def _get_applicable_methods(self) -> List[GroundedMethod]:
         """Get methods applicable to the current task."""
@@ -491,11 +618,15 @@ class HtnPlanner:
                 if isinstance(existing_priority, str):
                     existing_priority = priority_map.get(existing_priority, 3)
 
-                if task_priority <= existing_priority:
+                if task_priority < existing_priority:
+                    pos = i
                     self.root_tasks.insert(i, task)
-                    if self.enable_logging:
-                        self.logger.info(f"Added task {task.name} at position {i} with priority {task.priority}")
-                    return
+                else:
+                    pos = i + 1
+                self.root_tasks.insert(pos, task)
+                if self.enable_logging:
+                    self.logger.info(f"Added task {task.name} at position {pos} with priority {task.priority}")
+                return
 
             self.root_tasks.append(task)
             if self.enable_logging:
