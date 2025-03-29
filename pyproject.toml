@@ -10,8 +10,8 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Glen Smith", email = "glensmith[at]gatech(dot)edu"},
-    {name = "Momin N. Siddiqui", email = "msiddiqui66[at]gatech(dot)edu"}
+    {name = "Glen Smith", email = "glensmith@gatech.edu"},
+    {name = "Momin N. Siddiqui", email = "msiddiqui66@gatech.edu"}
     # Add more authors here as needed
 ]
 dependencies = [
