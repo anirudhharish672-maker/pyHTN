@@ -1,5 +1,5 @@
 from typing import Dict, List, Tuple, Any
-from py_htn.domain.operators import GroundedOperator
+from pyhtn.domain.operators import GroundedOperator
 
 
 class BlocksWorldEnvironment:

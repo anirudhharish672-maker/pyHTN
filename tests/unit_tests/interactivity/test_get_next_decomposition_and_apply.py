@@ -4,12 +4,12 @@ import copy
 import logging
 import os
 import time
-from py_htn.planner.planner import HtnPlanner
-from py_htn.domain.task import GroundedTask, NetworkTask
-from py_htn.domain.method import GroundedMethod, NetworkMethod
-from py_htn.domain.operators import GroundedOperator, NetworkOperator
-from py_htn.exceptions import FailedPlanException, StopException
-from py_htn.planner.trace import Trace
+from pyhtn.planner.planner import HtnPlanner
+from pyhtn.domain.task import GroundedTask, NetworkTask
+from pyhtn.domain.method import GroundedMethod, NetworkMethod
+from pyhtn.domain.operators import GroundedOperator, NetworkOperator
+from pyhtn.exceptions import FailedPlanException, StopException
+from pyhtn.planner.trace import Trace
 
 # Set up logging at the module level
 log_dir = "test_logs"

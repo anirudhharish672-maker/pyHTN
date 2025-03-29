@@ -8,14 +8,14 @@ import logging
 import sys
 from pprint import pprint
 
-from py_htn.conditions.conditions import AND
-from py_htn.conditions.fact import Fact
-from py_htn.domain.method import NetworkMethod
-from py_htn.domain.operators import NetworkOperator
-from py_htn.domain.task import GroundedTask, NetworkTask
-from py_htn.exceptions import FailedPlanException
-from py_htn.planner.planner import HtnPlanner
-from py_htn.domain.variable import V
+from pyhtn.conditions.conditions import AND
+from pyhtn.conditions.fact import Fact
+from pyhtn.domain.method import NetworkMethod
+from pyhtn.domain.operators import NetworkOperator
+from pyhtn.domain.task import GroundedTask, NetworkTask
+from pyhtn.exceptions import FailedPlanException
+from pyhtn.planner.planner import HtnPlanner
+from pyhtn.domain.variable import V
 from tests.blocks_world.blocks_world_env import BlocksWorldEnvironment
 
 
