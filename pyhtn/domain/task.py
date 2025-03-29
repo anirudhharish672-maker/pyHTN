@@ -1,5 +1,5 @@
 from uuid import uuid4
-from py_htn.common.imports.typing import *
+from pyhtn.common.imports.typing import *
 
 class BaseTask:
     """

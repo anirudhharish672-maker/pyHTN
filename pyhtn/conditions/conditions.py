@@ -1,6 +1,6 @@
 from itertools import chain
-from py_htn.domain.variable import V
-from py_htn.common.imports.typing import *
+from pyhtn.domain.variable import V
+from pyhtn.common.imports.typing import *
 
 
 class ConditionalElement():

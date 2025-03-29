@@ -4,16 +4,16 @@ from itertools import chain
 import logging
 import time
 
-from py_htn.common.imports.typing import *
-from py_htn.domain.method import GroundedMethod
-from py_htn.domain.operators import GroundedOperator
-from py_htn.domain.operators import NetworkOperator
-from py_htn.domain.task import GroundedTask
-from py_htn.domain.task import NetworkTask
-from py_htn.exceptions import FailedPlanException, StopException
-from py_htn.validation import validate_domain, validate_tasks
-from py_htn.planner.planner_logger import PlannerLogger
-from py_htn.planner.trace import Trace
+from pyhtn.common.imports.typing import *
+from pyhtn.domain.method import GroundedMethod
+from pyhtn.domain.operators import GroundedOperator
+from pyhtn.domain.operators import NetworkOperator
+from pyhtn.domain.task import GroundedTask
+from pyhtn.domain.task import NetworkTask
+from pyhtn.exceptions import FailedPlanException, StopException
+from pyhtn.validation import validate_domain, validate_tasks
+from pyhtn.planner.planner_logger import PlannerLogger
+from pyhtn.planner.trace import Trace
 
 
 class Cursor:

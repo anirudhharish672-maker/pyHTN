@@ -2,13 +2,13 @@ from random import choice
 from .network_element import NetworkElement
 from .operators import GroundedOperator
 from .task import GroundedTask
-from py_htn.common.imports.typing import *
-from py_htn.conditions.pattern_matching import dict_to_tuple
-from py_htn.conditions.pattern_matching import fact_to_tuple
-from py_htn.conditions.pattern_matching import msubst
-from py_htn.conditions.pattern_matching import subst
-from py_htn.conditions.pattern_matching import tuples_to_dicts
-from py_htn.conditions.pattern_matching import unify
+from pyhtn.common.imports.typing import *
+from pyhtn.conditions.pattern_matching import dict_to_tuple
+from pyhtn.conditions.pattern_matching import fact_to_tuple
+from pyhtn.conditions.pattern_matching import msubst
+from pyhtn.conditions.pattern_matching import subst
+from pyhtn.conditions.pattern_matching import tuples_to_dicts
+from pyhtn.conditions.pattern_matching import unify
 from py_plan.pattern_matching import build_index
 from py_plan.pattern_matching import pattern_match
 

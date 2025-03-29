@@ -3,10 +3,10 @@ from operator import or_
 from typing import List, Tuple, Set, Dict, Union
 from py_plan.unification import execute_functions
 
-from py_htn.domain.task import NetworkTask, GroundedTask
+from pyhtn.domain.task import NetworkTask, GroundedTask
 
 
-# from py_htn.domain import BaseTask
+# from pyhtn.domain import BaseTask
 
 
 

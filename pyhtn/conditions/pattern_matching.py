@@ -1,10 +1,10 @@
 from collections import defaultdict
 import inspect
-from py_htn.common.imports.typing import *
-from py_htn.domain.variable import V
+from pyhtn.common.imports.typing import *
+from pyhtn.domain.variable import V
 from py_plan.unification import is_variable, unify_var
-from py_htn.conditions.fact import Fact
-from py_htn.conditions.conditions import AND, OR, NOT, Filter
+from pyhtn.conditions.fact import Fact
+from pyhtn.conditions.conditions import AND, OR, NOT, Filter
 
 
 def msubst(theta: Dict, tasks: Union[Any, List, Tuple]) -> Union[Any, List, Tuple]:

@@ -1,5 +1,5 @@
 from network_element import NetworkElement
-from py_htn.conditions.pattern_matching import subst
+from pyhtn.conditions.pattern_matching import subst
 from py_plan.pattern_matching import build_index
 from py_plan.pattern_matching import pattern_match
 

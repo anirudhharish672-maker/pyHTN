@@ -2,12 +2,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from itertools import chain
 
-from py_htn.conditions.conditions import ComposableCond
-from py_htn.conditions.conditions import Cond
-from py_htn.conditions.conditions import AND
-from py_htn.conditions.conditions import Bind
-from py_htn.domain.variable import gen_variable
-from py_htn.domain.variable import V
+from pyhtn.conditions.conditions import ComposableCond
+from pyhtn.conditions.conditions import Cond
+from pyhtn.conditions.conditions import AND
+from pyhtn.conditions.conditions import Bind
+from pyhtn.domain.variable import gen_variable
+from pyhtn.domain.variable import V
 
 if TYPE_CHECKING:
     from typing import Generator
