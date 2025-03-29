@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Glen Smith", email = "glensmith[at]gatech(dot)edu"},
-    {name = "Momin N. Siddiqui", email = ""}
+    {name = "Momin N. Siddiqui", email = "msiddiqui66[at]gatech(dot)edu"}
     # Add more authors here as needed
 ]
 dependencies = [
