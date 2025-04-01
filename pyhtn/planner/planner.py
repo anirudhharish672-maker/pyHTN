@@ -6,6 +6,7 @@ import time
 
 from pyhtn.common.imports.typing import *
 from pyhtn.domain.method import GroundedMethod
+from pyhtn.domain.method import NetworkMethod
 from pyhtn.domain.operators import GroundedOperator
 from pyhtn.domain.operators import NetworkOperator
 from pyhtn.domain.task import GroundedTask
@@ -184,8 +185,8 @@ class HtnPlanner:
     """
 
     def __init__(self,
-                 tasks: List,
-                 domain: Dict,
+                 domain: Dict[str, List[NetworkMethod]],
+                 tasks: List[dict] = None,
                  env=None,
                  validate_input: bool = False,
                  repeat_wait_time: int = 5,
@@ -194,7 +195,19 @@ class HtnPlanner:
                  log_dir: str = None,
                  log_level: int = logging.INFO,
                  console_output: bool = False):
-        """Initialize the HTN planner."""
+        """
+        Initialize the HTN planner.
+        :param tasks:
+        :param domain:
+        :param env:
+        :param validate_input:
+        :param repeat_wait_time:
+        :param order_by_cost:
+        :param enable_logging:
+        :param log_dir:
+        :param log_level:
+        :param console_output:
+        """
         # Validate inputs if requested
         if validate_input:
             validate_domain(domain)
@@ -235,7 +248,8 @@ class HtnPlanner:
             self.logger.info(f"Domain network structure: {list(self.domain_network.keys())}")
 
         # Add tasks to planning queue
-        self._add_tasks(tasks)
+        if tasks is not None:
+            self._add_tasks(tasks)
 
         if self.enable_logging:
             self.logger.info(f"Added {len(self.root_tasks)} root tasks")
@@ -270,6 +284,19 @@ class HtnPlanner:
         if isinstance(tasks, dict):
             tasks = [tasks]
         self._add_tasks(tasks)
+
+    def add_method(self,
+                   task_name: str,
+                   task_args: List['V'],
+                   preconditions: 'Fact',
+                   subtasks: List[Any]
+                   ):
+        new_method = NetworkMethod(name=task_name, args=task_args, preconditions=preconditions, subtasks=subtasks)
+        domain_key = f"{task_name}/{len(task_args)}"
+        self.domain_network[domain_key].append(new_method)
+        return new_method
+
+
 
     def get_current_plan(self):
         """Gets the current plan."""
@@ -440,20 +467,21 @@ class HtnPlanner:
 
         return self.trace.get_current_plan()
 
-    def get_next_decomposition(self):
+    def get_next_method_application(self, all_methods: bool = False):
         """
         Steps to the next applicable method for a task.
-        :return: The current task and method
-        {
-            'method': The current applicable method (or None if no more methods),
-            'is_last': Boolean indicating if this is the last applicable method,
-            'method_index': Current method index,
-            'total_methods': Total number of applicable methods
-        }
+        :param all_methods: Whether to return all methods or one method at a time
+        :return: The current task and either next method or all methods
         """
 
         # Clear trace
         # self.trace = Trace()
+
+        if not self.root_tasks:
+            if self.enable_logging:
+                self.logger.error("No tasks to plan for")
+            raise StopException("There are no tasks to plan for. You must add tasks to the planner first"
+                                " using add_tasks().")
 
         if not self.cursor.current_task or self.cursor.current_task.status == 'succeeded':
             if not self._set_cursor_to_new_task():
@@ -468,6 +496,13 @@ class HtnPlanner:
                 self.logger.info(f"All methods for task ({self.cursor.current_task.name}) have been returned."
                                   f" No remaining methods.")
             return self.cursor.current_task, None
+
+        # Return all applicable methods
+        if all_methods:
+            # Set method index to end of list so that if called again, there is nothing to return
+            self.cursor.current_method_index = len(self.cursor.available_methods)
+            return self.cursor.current_task, self.cursor.available_methods
+
 
         # Get next method
         method = self.cursor.available_methods[self.cursor.current_method_index]
@@ -487,7 +522,7 @@ class HtnPlanner:
         if self.enable_logging:
             self.logger.info(f"Providing method: {method.name} for task {self.cursor.current_task.name}")
 
-        return self.cursor.current_task, method
+        return self.cursor.current_task, [method]
 
     def _set_cursor_to_new_task(self):
         next_task = self.root_tasks.pop(0)
@@ -509,7 +544,7 @@ class HtnPlanner:
         self.cursor.current_method_index = 0
         return True
 
-    def apply(self, task: GroundedTask, method_to_apply):
+    def apply_method_application(self, task: GroundedTask, method_to_apply):
         """
         Steps to the next subtask of a method.
         :param method_to_apply:
@@ -544,7 +579,6 @@ class HtnPlanner:
         self.cursor.current_method_index = 0
 
         return self.plan(interactive=True)
-
 
     def _get_applicable_methods(self) -> List[GroundedMethod]:
         """Get methods applicable to the current task."""

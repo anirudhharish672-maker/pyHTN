@@ -1,0 +1,4 @@
+- questions for Danny
+  - Confused on what a match is, not grounded args?
+  - What function in CondLearner class provides the match for method applications, i.e. grounded arguments?
+  - 

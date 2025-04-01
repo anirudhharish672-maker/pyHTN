@@ -26,6 +26,10 @@ class NetworkMethod(NetworkElement):
         self.type = 'method'
         self.subtasks = subtasks
 
+    # def unify_head(self, task_head: tuple):
+    #     substitutions = unify(task_head, self.head)
+    #    return msubst(substitutions, self.head)
+
     def applicable(self, task, state, plan, visited):
         ptstate = dict_to_tuple(state)
         index = build_index(ptstate)
@@ -45,9 +49,9 @@ class NetworkMethod(NetworkElement):
             visited.append((task.name, str(ptcondition), str(state), plan))
             # Find if method's precondition is satisfied by state
             # Only checks one substitution, not all
-            methods = [(self.name, theta) for theta in pattern_match(ptcondition, index, substitutions)]
-            if methods:
-                m, theta = choice(methods)
+            matches = [(self.name, theta) for theta in pattern_match(ptcondition, index, substitutions)]
+            if matches:
+                method_name, theta = choice(matches)
                 grounded_subtask_args = msubst(theta, self.subtasks)
                 grounded_subtasks = self._create_grounded_subtasks(grounded_subtask_args)
                 matched_facts = tuples_to_dicts(subst(theta, tuple(ptcondition)), use_facts=True, use_and_operator=True)
