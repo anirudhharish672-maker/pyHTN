@@ -497,11 +497,13 @@ class HtnPlanner:
                                   f" No remaining methods.")
             return self.cursor.current_task, None
 
-        # Return all applicable methods
+        # Return all methods
         if all_methods:
             # Set method index to end of list so that if called again, there is nothing to return
-            self.cursor.current_method_index = len(self.cursor.available_methods)
-            return self.cursor.current_task, self.cursor.available_methods
+            # self.cursor.current_method_index = len(self.cursor.available_methods)
+            self.cursor.current_method_index = len(self.domain_network[self.cursor.current_task.domain_key])
+            # return self.cursor.current_task, self.cursor.available_methods
+            return self.cursor.current_task, self.domain_network[self.cursor.current_task.domain_key]
 
 
         # Get next method
