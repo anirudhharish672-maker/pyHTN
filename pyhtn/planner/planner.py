@@ -187,9 +187,9 @@ class HtnPlanner:
     def __init__(self,
                  domain: Dict[str, List[NetworkMethod]],
                  tasks: List[dict] = None,
-                 env=None,
+                 env: Any = None,
                  validate_input: bool = False,
-                 repeat_wait_time: int = 5,
+                 repeat_wait_time: float = 0.1,
                  order_by_cost: bool = False,
                  enable_logging: bool = False,
                  log_dir: str = None,
@@ -254,26 +254,11 @@ class HtnPlanner:
         if self.enable_logging:
             self.logger.info(f"Added {len(self.root_tasks)} root tasks")
 
-    def reset(self):
-        self.trace = Trace()
-        self.cursor = Cursor()
-        self.root_tasks = []
-
-    def clear_tasks(self):
-        """Clear all tasks."""
-        self.root_tasks = []
-        self.cursor.reset()
-
-    def remove_task(self, task: str):
-        """
-        Remove the next occurrence of a task. If the provided task is the current task,
-        it will be removed and the planner will automatically continue to the next text.
-        """
-        pass
-
-    def remove_tasks(self, tasks: List[str]):
-        """Remove all occurrences of the tasks in the given list."""
-        pass
+    def add_method(self, task_name: str, task_args: tuple['V'], preconditions: 'Fact', subtasks: List[Any]):
+        new_method = NetworkMethod(name=task_name, args=task_args, preconditions=preconditions, subtasks=subtasks)
+        domain_key = f"{task_name}/{len(task_args)}"
+        self.domain_network[domain_key].append(new_method)
+        return new_method
 
     def add_tasks(self, tasks: Union[dict, List[dict]]) -> None:
         """
@@ -285,18 +270,10 @@ class HtnPlanner:
             tasks = [tasks]
         self._add_tasks(tasks)
 
-    def add_method(self,
-                   task_name: str,
-                   task_args: tuple['V'],
-                   preconditions: 'Fact',
-                   subtasks: List[Any]
-                   ):
-        new_method = NetworkMethod(name=task_name, args=task_args, preconditions=preconditions, subtasks=subtasks)
-        domain_key = f"{task_name}/{len(task_args)}"
-        self.domain_network[domain_key].append(new_method)
-        return new_method
-
-
+    def clear_tasks(self):
+        """Clear all tasks."""
+        self.root_tasks = []
+        self.cursor.reset()
 
     def get_current_plan(self):
         """Gets the current plan."""
@@ -309,65 +286,7 @@ class HtnPlanner:
         :return:
         """
         """Gets the current trace."""
-        return self.trace.get_current_trace()
-
-    def print_current_plan(self):
-        """Prints the current plan."""
-        return self.trace.print_plan()
-
-    def print_current_trace(self, include_states: bool = False) -> None:
-        """
-        Prints the current trace.
-        :param include_states: Whether to include state information in the output
-        :return:
-        """
-        return self.trace.print_trace(include_states)
-
-    def print_network(self, format: str = 'domain') -> None:
-        """
-        Visualize the planner network.
-        :param format:
-        :return: None
-        """
-        strings = []
-        tab = '\t'
-        header = "PLANNER NETWORK"
-        border = '#' * (len(header) + 4)
-        print(border)
-        print('# ' + header + ' #')
-        print(border + '\n')
-
-        for task_key, methods in self.domain_network.items():
-            task_name, num_args = task_key.split("/")
-            strings.append(0 * tab + f'Task({task_name}, num_args={num_args})')
-
-            for method in methods:
-                strings.append(1 * tab + f'Method({method.name}, args={method.args})')
-                for subtask in method.subtasks:
-                    strings.append(2 * tab + f'{subtask.type.title()}({subtask.name}, args={subtask.args})')
-        for s in strings:
-            print(s)
-        print('\n')
-
-    def print_planner_state(self):
-        print("===== PLANNER STATE =====")
-        print(f"Root tasks: {len(self.root_tasks)}")
-        if self.root_tasks:
-            for i, task in enumerate(self.root_tasks):
-                print(f"  Task {i}: {task.name} (status: {task.status})")
-
-        print(f"Current task: {self.cursor.current_task.name if self.cursor.current_task else None}")
-        print(f"Current method: {self.cursor.current_method.name if self.cursor.current_method else None}")
-        print(f"Current subtask index: {self.cursor.current_subtask_index}")
-        print(f"Available methods: {len(self.cursor.available_methods)}")
-        print(f"Current method index: {self.cursor.current_method_index}")
-        print(f"Stack depth: {len(self.cursor.stack)}")
-
-        print(f"Trace entries: {len(self.trace.entries)}")
-        for i, entry in enumerate(self.trace.entries[-5:]):  # Show last 5 entries
-            print(f"  Entry {i}: type={entry.entry_type}")
-
-        print("=========================")
+        return self.trace.get_current_trace(include_states)
 
     def plan(self, interactive: bool = False) -> List:
         """
@@ -467,6 +386,81 @@ class HtnPlanner:
 
         return self.trace.get_current_plan()
 
+    def print_current_plan(self):
+        """Prints the current plan."""
+        return self.trace.print_plan()
+
+    def print_current_trace(self, include_states: bool = False) -> None:
+        """
+        Prints the current trace.
+        :param include_states: Whether to include state information in the output
+        :return:
+        """
+        return self.trace.print_trace(include_states)
+
+    def print_network(self) -> None:
+        """
+        Visualize the planner network.
+        :return: None
+        """
+        strings = []
+        tab = '\t'
+        header = "PLANNER NETWORK"
+        border = '#' * (len(header) + 4)
+        print(border)
+        print('# ' + header + ' #')
+        print(border + '\n')
+
+        for task_key, methods in self.domain_network.items():
+            task_name, num_args = task_key.split("/")
+            strings.append(0 * tab + f'Task({task_name}, num_args={num_args})')
+
+            for method in methods:
+                strings.append(1 * tab + f'Method({method.name}, args={method.args})')
+                for subtask in method.subtasks:
+                    strings.append(2 * tab + f'{subtask.type.title()}({subtask.name}, args={subtask.args})')
+        for s in strings:
+            print(s)
+        print('\n')
+
+    def print_planner_state(self):
+        print("===== PLANNER STATE =====")
+        print(f"Root tasks: {len(self.root_tasks)}")
+        if self.root_tasks:
+            for i, task in enumerate(self.root_tasks):
+                print(f"  Task {i}: {task.name} (status: {task.status})")
+
+        print(f"Current task: {self.cursor.current_task.name if self.cursor.current_task else None}")
+        print(f"Current method: {self.cursor.current_method.name if self.cursor.current_method else None}")
+        print(f"Current subtask index: {self.cursor.current_subtask_index}")
+        print(f"Available methods: {len(self.cursor.available_methods)}")
+        print(f"Current method index: {self.cursor.current_method_index}")
+        print(f"Stack depth: {len(self.cursor.stack)}")
+
+        print(f"Trace entries: {len(self.trace.entries)}")
+        for i, entry in enumerate(self.trace.entries[-5:]):  # Show last 5 entries
+            print(f"  Entry {i}: type={entry.entry_type}")
+
+        print("=========================")
+
+    def remove_task(self, task: str):
+        """
+        Remove the next occurrence of a task. If the provided task is the current task,
+        it will be removed and the planner will automatically continue to the next text.
+        """
+        pass
+
+    def remove_tasks(self, tasks: List[str]):
+        """
+        Remove all occurrences of the tasks in the given list.
+        """
+        pass
+
+    def reset(self):
+        self.trace = Trace()
+        self.cursor = Cursor()
+        self.root_tasks = []
+
     def get_next_method_application(self, all_methods: bool = False):
         """
         Steps to the next applicable method for a task.
@@ -524,118 +518,39 @@ class HtnPlanner:
 
         return self.cursor.current_task, [method]
 
-    def _set_cursor_to_new_task(self):
-        next_task = self.root_tasks.pop(0)
-        if self.enable_logging:
-            self.logger.info(f"Moving on to new task: ({next_task.name})")
-        # Handle repeat tasks
-        if next_task.repeat > 0:
-            next_task.repeat -= 1
-            self.root_tasks.insert(0, next_task)
-        self.cursor.set_task(next_task)
-        # Get and store applicable methods
-        methods = self._get_applicable_methods()
-        if not methods:
-            if self.enable_logging:
-                self.logger.info(f"No applicable methods found for task: ({self.cursor.current_task.name})")
-            return False
-
-        self.cursor.available_methods = methods
-        self.cursor.current_method_index = 0
-        return True
-
-    def apply_method_application(self, task: GroundedTask, method_to_apply):
+    def apply_method_application(self, task: GroundedTask, method_to_apply: Any):
         """
         Steps to the next subtask of a method.
-        :param method_to_apply:
-        :return: The method to execute
+        :param task: The current task
+        :param method_to_apply: The method to apply to the task
+        :return: The plan after applying the method
         """
 
         if not self.cursor.current_task:
             self.cursor.current_task = task
-            self.cursor.available_methods.append(method_to_apply)
-            self.cursor.current_method_index = 0
-            self.cursor.current_method = method_to_apply
-            self.cursor.current_subtask_index = 0
+        self.cursor.available_methods.append(method_to_apply.method)
+        self.cursor.current_method_index = 0
+        self.cursor.current_method = method_to_apply.method
+        self.cursor.current_subtask_index = 0
 
         # Add to trace
         self.trace.add_method(
             self.cursor.current_task,
-            method_to_apply,
-            f"Applying subtasks of method ({method_to_apply.name})"
+            method_to_apply.method,
+            f"Applying subtasks of method ({method_to_apply.method.name})"
         )
 
-        method = None
-        # Locate method in network
-        for m in self.domain_network[self.cursor.current_task.domain_key]:
-            if m.id == method_to_apply.id:
-                method = m
-                break
-
         # Set cursor to this method
-        self.cursor.available_methods.append(method)
-        self.cursor.current_method = method
-        self.cursor.current_subtask_index = 0
-        self.cursor.current_method_index = 0
+        # self.cursor.available_methods.append(method)
+        # self.cursor.current_method = method
+        # self.cursor.current_subtask_index = 0
+        # self.cursor.current_method_index = 0
 
         return self.plan(interactive=True)
 
-    def _get_applicable_methods(self) -> List[GroundedMethod]:
-        """Get methods applicable to the current task."""
-        if self.enable_logging:
-            self.logger.info(f"Locating applicable methods for task {self.cursor.current_task.name}")
-
-        if not self.state:
-            raise ValueError("State must be set before getting applicable methods")
-
-        # Check if there are methods for this task type
-        if self.cursor.current_task.domain_key not in self.domain_network:
-            if self.enable_logging:
-                self.logger.warning(f"No methods found for task {self.cursor.current_task.domain_key}")
-            return []
-
-        applicable_methods = []
-        methods = self.domain_network[self.cursor.current_task.domain_key]
-
-        # Sort by cost if requested
-        if self.order_by_cost:
-            methods = sorted(methods, key=lambda m: m.cost)
-
-        # Check each method
-        visited = []
-        for method in methods:
-            result = method.applicable(self.cursor.current_task, self.state, str(self.trace.get_current_plan()), visited)
-            if result:
-                applicable_methods.append(result)
-                if self.enable_logging:
-                    self.logger.info(f"Method {method.name} is applicable to task {self.cursor.current_task.name}")
-
-        if self.enable_logging:
-            self.logger.info(
-                f"Found {len(applicable_methods)} applicable methods for task {self.cursor.current_task.name}")
-
-        return applicable_methods
-
-    def _add_tasks(self, tasks: List[Union[str, Tuple, Dict]]) -> None:
-        """
-        Internal method for adding tasks to the planning queue.
-        :param tasks: A list of task specifications.
-        :return: None
-        """
-        if self.validate:
-            validate_tasks(tasks)
-
-        for t in tasks:
-            task_name = t.get('name')
-            args = t.get('arguments', ())
-            priority = t.get('priority', 'low')
-            repeat = t.get('repeat', False)
-
-            task = GroundedTask(task_name, args=args, priority=priority, repeat=repeat)
-            self._add_task_node(task)
-
-            if self.enable_logging:
-                self.logger.info(f"Added task: ({task.name}) with priority ({priority}), repeat={repeat}")
+    ####################
+    # HELPER FUNCTIONS #
+    ####################
 
     def _add_task_node(self, task: GroundedTask) -> None:
         """Add a task to the root tasks queue based on priority."""
@@ -666,46 +581,78 @@ class HtnPlanner:
             if self.enable_logging:
                 self.logger.info(f"Added task {task.name} at the end with priority {task.priority}")
 
-    def _process_current_task(self) -> bool:
-        """Process the current task by finding and applying methods."""
-        if self.enable_logging:
-            self.logger.info(f"Processing task {self.cursor.current_task.name}")
+    def _add_tasks(self, tasks: List[Union[str, Tuple, Dict]]) -> None:
+        """
+        Internal method for adding tasks to the planning queue.
+        :param tasks: A list of task specifications.
+        :return: None
+        """
+        if self.validate:
+            validate_tasks(tasks)
 
-        # Add task entry to trace
-        self.trace.add_task(self.cursor.current_task)
+        for t in tasks:
+            task_name = t.get('name')
+            args = t.get('arguments', ())
+            priority = t.get('priority', 'low')
+            repeat = t.get('repeat', False)
 
-        # If we already have a method, continue executing it
-        if self.cursor.current_method:
-            return self._continue_method_execution()
+            task = GroundedTask(task_name, args=args, priority=priority, repeat=repeat)
+            self._add_task_node(task)
 
-        # Get applicable methods for this task
-        methods = self._get_applicable_methods()
-
-        if not methods:
             if self.enable_logging:
-                self.logger.warning(f"No applicable methods for task {self.cursor.current_task.name}")
-            self.cursor.current_task.status = 'failed'
-            return False
+                self.logger.info(f"Added task: ({task.name}) with priority ({priority}), repeat={repeat}")
 
-        # Store available methods for backtracking
-        self.cursor.available_methods = methods
-        self.cursor.current_method_index = 0
-        self.cursor.current_method = methods[0]
-        self.cursor.current_subtask_index = 0
-
-        # Add method entry to trace
-        self.trace.add_method(
-            self.cursor.current_task,
-            self.cursor.current_method,
-            "Method selected as first applicable method"
-        )
-
+    def _backtrack(self) -> bool:
+        """
+        Attempt to backtrack to an alternative method.
+        :return: Whether planner is able to backtrack to an alternative method.
+        """
         if self.enable_logging:
-            self.logger.info(
-                f"Selected method {self.cursor.current_method.name} for task {self.cursor.current_task.name}")
+            self.logger.info(f"Attempting to backtrack")
 
-        # Execute the selected method
-        return self._continue_method_execution()
+        # Try to backtrack with the cursor
+        from_task = self.cursor.current_task
+        result = self.cursor.backtrack()
+
+        if result:
+            # Add backtrack entry to trace
+            self.trace.add_backtrack(
+                from_task,
+                self.cursor.current_task,
+                f"Trying alternative method {self.cursor.current_method.name}"
+            )
+
+            # Add method entry for the new method
+            self.trace.add_method(
+                self.cursor.current_task,
+                self.cursor.current_method,
+                "Method selected after backtracking"
+            )
+
+            if self.enable_logging:
+                self.logger.info(f"Backtracked to task {self.cursor.current_task.name}, "
+                                 f"trying method {self.cursor.current_method.name}")
+            return True
+        else:
+            if self.enable_logging:
+                self.logger.warning("Backtracking failed, no alternative methods available")
+
+            # Add backtrack entry to trace
+            if self.cursor.stack:
+                parent_task = self.cursor.stack[-1][0]
+                self.trace.add_backtrack(
+                    from_task,
+                    parent_task,
+                    "No alternative methods available"
+                )
+            else:
+                self.trace.add_backtrack(
+                    from_task,
+                    None,
+                    "No alternative methods available and no parent task"
+                )
+
+            return False
 
     def _continue_method_execution(self) -> bool:
         """Continue executing subtasks of the current method."""
@@ -849,54 +796,103 @@ class HtnPlanner:
             self.logger.info(f"Executing operator {result.name} was successful")
         return True
 
-    def _backtrack(self) -> bool:
-        """
-        Attempt to backtrack to an alternative method.
-        :return: Whether planner is able to backtrack to an alternative method.
-        """
+    def _get_applicable_methods(self) -> List[GroundedMethod]:
+        """Get methods applicable to the current task."""
         if self.enable_logging:
-            self.logger.info(f"Attempting to backtrack")
+            self.logger.info(f"Locating applicable methods for task {self.cursor.current_task.name}")
 
-        # Try to backtrack with the cursor
-        from_task = self.cursor.current_task
-        result = self.cursor.backtrack()
+        if not self.state:
+            raise ValueError("State must be set before getting applicable methods")
 
-        if result:
-            # Add backtrack entry to trace
-            self.trace.add_backtrack(
-                from_task,
-                self.cursor.current_task,
-                f"Trying alternative method {self.cursor.current_method.name}"
-            )
-
-            # Add method entry for the new method
-            self.trace.add_method(
-                self.cursor.current_task,
-                self.cursor.current_method,
-                "Method selected after backtracking"
-            )
-
+        # Check if there are methods for this task type
+        if self.cursor.current_task.domain_key not in self.domain_network:
             if self.enable_logging:
-                self.logger.info(f"Backtracked to task {self.cursor.current_task.name}, "
-                                 f"trying method {self.cursor.current_method.name}")
-            return True
-        else:
+                self.logger.warning(f"No methods found for task {self.cursor.current_task.domain_key}")
+            return []
+
+        applicable_methods = []
+        methods = self.domain_network[self.cursor.current_task.domain_key]
+
+        # Sort by cost if requested
+        if self.order_by_cost:
+            methods = sorted(methods, key=lambda m: m.cost)
+
+        # Check each method
+        visited = []
+        for method in methods:
+            result = method.applicable(self.cursor.current_task, self.state, str(self.trace.get_current_plan()), visited)
+            if result:
+                applicable_methods.append(result)
+                if self.enable_logging:
+                    self.logger.info(f"Method {method.name} is applicable to task {self.cursor.current_task.name}")
+
+        if self.enable_logging:
+            self.logger.info(
+                f"Found {len(applicable_methods)} applicable methods for task {self.cursor.current_task.name}")
+
+        return applicable_methods
+
+    def _process_current_task(self) -> bool:
+        """Process the current task by finding and applying methods."""
+        if self.enable_logging:
+            self.logger.info(f"Processing task {self.cursor.current_task.name}")
+
+        # Add task entry to trace
+        self.trace.add_task(self.cursor.current_task)
+
+        # If we already have a method, continue executing it
+        if self.cursor.current_method:
+            return self._continue_method_execution()
+
+        # Get applicable methods for this task
+        methods = self._get_applicable_methods()
+
+        if not methods:
             if self.enable_logging:
-                self.logger.warning("Backtracking failed, no alternative methods available")
-
-            # Add backtrack entry to trace
-            if self.cursor.stack:
-                parent_task = self.cursor.stack[-1][0]
-                self.trace.add_backtrack(
-                    from_task,
-                    parent_task,
-                    "No alternative methods available"
-                )
-            else:
-                self.trace.add_backtrack(
-                    from_task,
-                    None,
-                    "No alternative methods available and no parent task"
-                )
-
+                self.logger.warning(f"No applicable methods for task {self.cursor.current_task.name}")
+            self.cursor.current_task.status = 'failed'
             return False
+
+        # Store available methods for backtracking
+        self.cursor.available_methods = methods
+        self.cursor.current_method_index = 0
+        self.cursor.current_method = methods[0]
+        self.cursor.current_subtask_index = 0
+
+        # Add method entry to trace
+        self.trace.add_method(
+            self.cursor.current_task,
+            self.cursor.current_method,
+            "Method selected as first applicable method"
+        )
+
+        if self.enable_logging:
+            self.logger.info(
+                f"Selected method {self.cursor.current_method.name} for task {self.cursor.current_task.name}")
+
+        # Execute the selected method
+        return self._continue_method_execution()
+
+    def _set_cursor_to_new_task(self):
+        next_task = self.root_tasks.pop(0)
+        if self.enable_logging:
+            self.logger.info(f"Moving on to new task: ({next_task.name})")
+        # Handle repeat tasks
+        if next_task.repeat > 0:
+            next_task.repeat -= 1
+            self.root_tasks.insert(0, next_task)
+        self.cursor.set_task(next_task)
+        # Get and store applicable methods
+        methods = self._get_applicable_methods()
+        if not methods:
+            if self.enable_logging:
+                self.logger.info(f"No applicable methods found for task: ({self.cursor.current_task.name})")
+            return False
+
+        self.cursor.available_methods = methods
+        self.cursor.current_method_index = 0
+        return True
+
+
+
+
