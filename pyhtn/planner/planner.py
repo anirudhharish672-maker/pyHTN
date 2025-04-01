@@ -476,14 +476,12 @@ class HtnPlanner:
 
         # Clear trace
         # self.trace = Trace()
-
-        if not self.root_tasks:
-            if self.enable_logging:
-                self.logger.error("No tasks to plan for")
-            raise StopException("There are no tasks to plan for. You must add tasks to the planner first"
-                                " using add_tasks().")
-
         if not self.cursor.current_task or self.cursor.current_task.status == 'succeeded':
+            if not self.root_tasks:
+                if self.enable_logging:
+                    self.logger.error("No tasks to plan for")
+                raise StopException("There are no tasks to plan for. You must add tasks to the planner first"
+                                    " using add_tasks().")
             if not self._set_cursor_to_new_task():
                 return self.cursor.current_task, None
 

@@ -1,15 +1,13 @@
 import unittest
 from unittest.mock import MagicMock, patch
-import copy
 import logging
 import os
 import time
 from pyhtn.planner.planner import HtnPlanner
-from pyhtn.domain.task import GroundedTask, NetworkTask
-from pyhtn.domain.method import GroundedMethod, NetworkMethod
-from pyhtn.domain.operators import GroundedOperator, NetworkOperator
+from pyhtn.domain.task import GroundedTask
+from pyhtn.domain.method import NetworkMethod
+from pyhtn.domain.operators import NetworkOperator
 from pyhtn.exceptions import FailedPlanException, StopException
-from pyhtn.planner.trace import Trace
 
 # Set up logging at the module level
 log_dir = "test_logs"
@@ -126,32 +124,33 @@ class TestPlannerDecompositionFunctions(unittest.TestCase):
             enable_logging=True
         )
 
-    def test_get_next_decomposition_returns_first_method(self):
-        """Test that get_next_decomposition returns the first applicable method"""
-        logger.info("=== Starting test_get_next_decomposition_returns_first_method ===")
+    def test_get_next_method_application_returns_first_method(self):
+        """Test that get_next_method_application) returns the first applicable method"""
+        logger.info("=== Starting test_get_next_method_application)_returns_first_method ===")
 
         planner = self.get_new_planner()
 
         # Print cursor state before
-        logger.info("Cursor state before get_next_decomposition: "
+        logger.info("Cursor state before get_next_method_application): "
                          f"current_task={planner.cursor.current_task}, "
                          f"current_method_index={planner.cursor.current_method_index}")
 
-        # Call get_next_decomposition
-        task_name, method = planner.get_next_decomposition()
+        # Call get_next_method_application)
+        task, method = planner.get_next_method_application()
+        method = method[0]
 
         # Print results
-        logger.info(f"get_next_decomposition returned task_name={task_name}, method.name={method.name}")
+        logger.info(f"get_next_method_application) returned task_name={task.name}, method.name={method.name}")
         logger.info(f"Cursor state after: current_method_index={planner.cursor.current_method_index}")
 
         # Verify results
-        self.assertEqual(task_name, 'make_coffee')
-        self.assertEqual(method.name, 'make_coffee')
+        assert task.name == 'make_coffee'
+        assert method.name == 'make_coffee'
         self.assertEqual(planner.cursor.current_method_index, 1)  # Should be incremented
 
-    def test_get_next_decomposition_returns_next_method(self):
-        """Test that get_next_decomposition returns the next method when called again"""
-        logger.info("=== Starting test_get_next_decomposition_returns_next_method ===")
+    def test_get_next_method_application_returns_next_method(self):
+        """Test that get_next_method_application) returns the next method when called again"""
+        logger.info("=== Starting test_get_next_method_application)_returns_next_method ===")
 
         planner = self.get_new_planner()
 
@@ -160,52 +159,58 @@ class TestPlannerDecompositionFunctions(unittest.TestCase):
                          f"current_task={planner.cursor.current_task}, "
                          f"current_method_index={planner.cursor.current_method_index}")
 
-        # Call get_next_decomposition twice
-        task_name1, method1 = planner.get_next_decomposition()
-        logger.info(f"First call returned task_name={task_name1}, method.name={method1.name}")
+        # Call get_next_method_application) twice
+        task1, method1 = planner.get_next_method_application()
+        method1 = method1[0]
+        logger.info(f"First call returned task_name={task1.name}, method.name={method1.name}")
         logger.info(
             f"Cursor state after first call: current_method_index={planner.cursor.current_method_index}")
 
-        task_name2, method2 = planner.get_next_decomposition()
-        logger.info(f"Second call returned task_name={task_name2}, method.name={method2.name}")
+        task2, method2 = planner.get_next_method_application()
+        method2 = method2[0]
+        logger.info(f"Second call returned task_name={task2.name}, method.name={method2.name}")
         logger.info(
             f"Cursor state after second call: current_method_index={planner.cursor.current_method_index}")
 
         # Verify results
-        self.assertEqual(task_name1, 'make_coffee')
-        self.assertEqual(method1.name, 'make_coffee')
+        assert task1.name == 'make_coffee'
+        assert method1.name == 'make_coffee'
 
-        self.assertEqual(task_name2, 'make_coffee')
-        self.assertEqual(method2.name, 'make_coffee')
+        assert task2.name == 'make_coffee'
+        assert method2.name == 'make_coffee'
+
         self.assertEqual(planner.cursor.current_method_index, 2)  # Should be incremented again
 
-    def test_get_next_decomposition_returns_none_when_no_more_methods(self):
-        """Test that get_next_decomposition returns None when no more methods are available"""
-        logger.info("=== Starting test_get_next_decomposition_returns_none_when_no_more_methods ===")
+    def test_get_next_method_application_returns_none_when_no_more_methods(self):
+        """Test that get_next_method_application) returns None when no more methods are available"""
+        logger.info("=== Starting test_get_next_method_application)_returns_none_when_no_more_methods ===")
 
         planner = self.get_new_planner()
 
-        # Call get_next_decomposition twice
-        task_name1, method1 = planner.get_next_decomposition()
-        logger.info(f"First call returned task_name={task_name1}, method.name={method1.name}")
+        # Call get_next_method_application) twice
+        task1, method1 = planner.get_next_method_application()
+        method1 = method1[0]
+        logger.info(f"First call returned task_name={task1.name}, method.name={method1.name}")
 
-        task_name2, method2 = planner.get_next_decomposition()
-        logger.info(f"Second call returned task_name={task_name2}, method.name={method2.name}")
+        task2, method2 = planner.get_next_method_application()
+        method2 = method2[0]
+        logger.info(f"Second call returned task_name={task2.name}, method.name={method2.name}")
         logger.info(
             f"Cursor state after second call: current_method_index={planner.cursor.current_method_index}")
 
         planner.cursor.print()
 
-        task_name3, method3 = planner.get_next_decomposition()
+        task3, method3 = planner.get_next_method_application()
 
-        self.assertEqual(task_name1, 'make_coffee')
-        self.assertEqual(method1.name, 'make_coffee')
+        assert task1.name == 'make_coffee'
+        assert method1.name == 'make_coffee'
 
-        self.assertEqual(task_name2, 'make_coffee')
-        self.assertEqual(method2.name, 'make_coffee')
+        assert task2.name == 'make_coffee'
+        assert method2.name == 'make_coffee'
 
-        self.assertEqual(task_name3, 'make_coffee')
-        self.assertIsNone(method3)  # Should be None when no more methods
+        assert task3.name == 'make_coffee'
+        self.assertIsNone(method3)
+
         self.assertEqual(planner.cursor.current_method_index, 2)
 
 
@@ -231,7 +236,7 @@ class TestPlannerDecompositionFunctions(unittest.TestCase):
 
                 # Call apply
                 logger.info("Calling apply with method_to_apply")
-                result = planner.apply(GroundedTask('make_coffee', ()), method_to_apply)
+                result = planner.apply_method_application(GroundedTask('make_coffee', ()), method_to_apply)
                 logger.info(f"apply returned result with {len(result) if result else 0} plan steps")
 
                 # Print current state
@@ -290,7 +295,7 @@ class TestPlannerDecompositionFunctions(unittest.TestCase):
 
                 # Call apply
                 logger.info("Calling apply with method_with_only_operators")
-                result = planner.apply(GroundedTask(name='all_operators', args=[]), method_with_only_operators)
+                result = planner.apply_method_application(GroundedTask(name='all_operators', args=[]), method_with_only_operators)
 
                 # Print trace state after
                 logger.info(f"Trace entries after: {len(planner.trace.entries)}")
@@ -349,7 +354,7 @@ class TestPlannerDecompositionFunctions(unittest.TestCase):
                     # Call apply should catch the exception
                     logger.info("Calling apply with method_with_failing_op")
                     try:
-                        planner.apply(GroundedTask(name='task_with_failure', args=[]), method_with_failing_op)
+                        planner.apply_method_application(GroundedTask(name='task_with_failure', args=[]), method_with_failing_op)
                         logger.error("Expected exception was not raised")
                     except FailedPlanException as e:
                         logger.info(f"Caught expected exception: {str(e)}")
