@@ -30,7 +30,10 @@ class BaseTask:
         return self.id
 
     def __eq__(self, other):
-        return self.id
+        return (
+            self.name == other.name and
+            len(self.args) == len(other.args)
+        )
 
     def _get_str(self):
         return f'BaseTask(name={self.name}, args={self.args})'

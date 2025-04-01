@@ -287,7 +287,7 @@ class HtnPlanner:
 
     def add_method(self,
                    task_name: str,
-                   task_args: List['V'],
+                   task_args: tuple['V'],
                    preconditions: 'Fact',
                    subtasks: List[Any]
                    ):
