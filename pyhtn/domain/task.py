@@ -1,3 +1,4 @@
+import re
 from uuid import uuid4
 from pyhtn.common.imports.typing import *
 
@@ -29,7 +30,7 @@ class BaseTask:
         return self._get_str()
 
     def __hash__(self):
-        return self.id
+        return int(''.join(re.findall(r'\d+', self.id)))
 
     def __eq__(self, other):
         return (
