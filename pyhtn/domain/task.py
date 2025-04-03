@@ -19,6 +19,8 @@ class BaseTask:
         self.head = (self.name, *self.args)
         # index_chain keeps track of where task is in global task list for easier removal
         self.index_chain = None
+        # Propagate hash function to all subclasses
+        self.__class__.__hash__ = BaseTask.__hash__
 
     def __str__(self):
         return self._get_str()
