@@ -7,6 +7,7 @@ import time
 from pyhtn.common.imports.typing import *
 from pyhtn.domain.method import GroundedMethod
 from pyhtn.domain.method import NetworkMethod
+from pyhtn.domain.method_application import MethodApplication
 from pyhtn.domain.operators import GroundedOperator
 from pyhtn.domain.operators import NetworkOperator
 from pyhtn.domain.task import GroundedTask
@@ -256,8 +257,8 @@ class HtnPlanner:
 
     def add_method(self, task_name: str, task_args: tuple['V'], preconditions: 'Fact', subtasks: List[Any]):
         new_method = NetworkMethod(name=task_name, args=task_args, preconditions=preconditions, subtasks=subtasks)
-        domain_key = f"{task_name}/{len(task_args)}"
-        self.domain_network[domain_key].append(new_method)
+        task_id = f"{task_name}/{len(task_args)}"
+        self.domain_network[task_id].append(new_method)
         return new_method
 
     def add_tasks(self, tasks: Union[dict, List[dict]]) -> None:
@@ -493,9 +494,9 @@ class HtnPlanner:
         if all_methods:
             # Set method index to end of list so that if called again, there is nothing to return
             # self.cursor.current_method_index = len(self.cursor.available_methods)
-            self.cursor.current_method_index = len(self.domain_network[self.cursor.current_task.domain_key])
+            self.cursor.current_method_index = len(self.domain_network[self.cursor.current_task.id])
             # return self.cursor.current_task, self.cursor.available_methods
-            return self.cursor.current_task, self.domain_network[self.cursor.current_task.domain_key]
+            return self.cursor.current_task, self.domain_network[self.cursor.current_task.id]
 
 
         # Get next method
@@ -518,7 +519,7 @@ class HtnPlanner:
 
         return self.cursor.current_task, [method]
 
-    def apply_method_application(self, task: GroundedTask, method_to_apply: Any):
+    def apply_method_application(self, task: GroundedTask, method_to_apply: MethodApplication):
         """
         Steps to the next subtask of a method.
         :param task: The current task
@@ -805,13 +806,13 @@ class HtnPlanner:
             raise ValueError("State must be set before getting applicable methods")
 
         # Check if there are methods for this task type
-        if self.cursor.current_task.domain_key not in self.domain_network:
+        if self.cursor.current_task.id not in self.domain_network:
             if self.enable_logging:
-                self.logger.warning(f"No methods found for task {self.cursor.current_task.domain_key}")
+                self.logger.warning(f"No methods found for task {self.cursor.current_task.id}")
             return []
 
         applicable_methods = []
-        methods = self.domain_network[self.cursor.current_task.domain_key]
+        methods = self.domain_network[self.cursor.current_task.id]
 
         # Sort by cost if requested
         if self.order_by_cost:

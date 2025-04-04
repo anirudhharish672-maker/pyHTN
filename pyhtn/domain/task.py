@@ -13,10 +13,9 @@ class BaseTask:
                  name: str,
                  args: Union[List[Any], Tuple[Any, ...]] = ()):
         self.type = 'task'
-        self.id = str(uuid4()).replace('-', '')
         self.name = name
         self.args = args
-        self.domain_key = f'{self.name}/{len(self.args)}'
+        self.id = f'{self.name}/{len(self.args)}'
         self.head = (self.name, *self.args)
         # index_chain keeps track of where task is in global task list for easier removal
         self.index_chain = None
@@ -30,7 +29,7 @@ class BaseTask:
         return self._get_str()
 
     def __hash__(self):
-        return int(''.join(re.findall(r'\d+', self.id)))
+        return hash(self.id)
 
     def __eq__(self, other):
         return (
@@ -40,8 +39,6 @@ class BaseTask:
 
     def _get_str(self):
         return f'BaseTask(name={self.name}, args={self.args})'
-
-
 
 
 class GroundedTask(BaseTask):

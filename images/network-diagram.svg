@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 770 650">
+  <!-- Gradient Definitions -->
+  <defs>
+    <linearGradient id="taskGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#4F46E5" />
+    </linearGradient>
+    <linearGradient id="methodGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34D399" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+    <linearGradient id="operatorGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F97316" />
+      <stop offset="100%" stop-color="#EA580C" />
+    </linearGradient>
+
+    <!-- Arrowhead marker -->
+    <marker id="arrowhead" markerWidth="10" markerHeight="7"
+            refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748B" />
+    </marker>
+
+    <!-- Filter for shadows -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="770" height="650" fill="#F8FAFC" />
+
+  <!-- Title -->
+  <text x="400" y="40" text-anchor="middle" font-family="Arial" font-weight="bold" font-size="24" fill="#1E293B">HTN Domain Network Structure</text>
+
+  <!-- Main Task -->
+  <g id="mainTask" transform="translate(325, 80)">
+    <rect width="150" height="80" rx="10" ry="10" fill="url(#taskGradient)" filter="url(#shadow)" />
+    <text x="75" y="35" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold" font-size="14">NetworkTask</text>
+    <line x1="20" y1="45" x2="130" y2="45" stroke="white" stroke-opacity="0.5" />
+    <text x="75" y="65" text-anchor="middle" fill="white" font-family="Arial" font-size="12">Domain Key: name/arity</text>
+  </g>
+
+  <!-- Methods -->
+  <g id="method1" transform="translate(100, 220)">
+    <rect width="150" height="80" rx="10" ry="10" fill="url(#methodGradient)" filter="url(#shadow)" />
+    <text x="75" y="35" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold" font-size="14">NetworkMethod</text>
+    <line x1="20" y1="45" x2="130" y2="45" stroke="white" stroke-opacity="0.5" />
+    <text x="75" y="65" text-anchor="middle" fill="white" font-family="Arial" font-size="12">Decomposition Strategy</text>
+  </g>
+
+  <g id="method2" transform="translate(325, 220)">
+    <rect width="150" height="80" rx="10" ry="10" fill="url(#methodGradient)" filter="url(#shadow)" />
+    <text x="75" y="35" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold" font-size="14">NetworkMethod</text>
+    <line x1="20" y1="45" x2="130" y2="45" stroke="white" stroke-opacity="0.5" />
+    <text x="75" y="65" text-anchor="middle" fill="white" font-family="Arial" font-size="12">Decomposition Strategy</text>
+  </g>
+
+  <g id="method3" transform="translate(500, 220)">
+    <rect width="150" height="80" rx="10" ry="10" fill="url(#methodGradient)" filter="url(#shadow)" />
+    <text x="75" y="35" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold" font-size="14">NetworkMethod</text>
+    <line x1="20" y1="45" x2="130" y2="45" stroke="white" stroke-opacity="0.5" />
+    <text x="75" y="65" text-anchor="middle" fill="white" font-family="Arial" font-size="12">Decomposition Strategy</text>
+  </g>
+
+  <!-- Example Subtasks -->
+  <g id="exampleOperator" transform="translate(25, 380)">
+    <rect width="150" height="80" rx="10" ry="10" fill="url(#operatorGradient)" filter="url(#shadow)" />
+    <text x="75" y="35" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold" font-size="14">NetworkOperator</text>
+    <line x1="20" y1="45" x2="130" y2="45" stroke="white" stroke-opacity="0.5" />
+    <text x="75" y="65" text-anchor="middle" fill="white" font-family="Arial" font-size="12">Primitive Action</text>
+  </g>
+
+  <g id="exampleTask" transform="translate(205, 380)">
+    <rect width="150" height="80" rx="10" ry="10" fill="url(#taskGradient)" filter="url(#shadow)" />
+    <text x="75" y="35" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold" font-size="14">NetworkTask</text>
+    <line x1="20" y1="45" x2="130" y2="45" stroke="white" stroke-opacity="0.5" />
+    <text x="75" y="65" text-anchor="middle" fill="white" font-family="Arial" font-size="12">Domain Key: name/arity</text>
+  </g>
+
+  <!-- Connections -->
+  <!-- Task to Methods -->
+  <path d="M 355 160 L 175 220" stroke="#64748B" stroke-width="2" fill="none" marker-end="url(#arrowhead)" />
+  <path d="M 400 160 L 400 220" stroke="#64748B" stroke-width="2" fill="none" marker-end="url(#arrowhead)" />
+  <path d="M 445 160 L 575 220" stroke="#64748B" stroke-width="2" fill="none" marker-end="url(#arrowhead)" />
+
+  <!-- Method to Example Subtasks -->
+  <path d="M 175 300 L 100 380" stroke="#64748B" stroke-width="2" fill="none" marker-end="url(#arrowhead)" />
+  <path d="M 175 300 L 280 380" stroke="#64748B" stroke-width="2" fill="none" marker-end="url(#arrowhead)" />
+
+  <!-- Connection Labels -->
+  <text x="200" y="190" font-family="Arial" font-size="12" fill="#475569">solved by</text>
+  <text x="405" y="190" font-family="Arial" font-size="12" fill="#475569">solved by</text>
+  <text x="525" y="190" font-family="Arial" font-size="12" fill="#475569">solved by</text>
+
+  <text x="220" y="330" font-family="Arial" font-size="12" fill="#475569">subtask</text>
+  <text x="100" y="330" font-family="Arial" font-size="12" fill="#475569">subtask</text>
+
+  <!-- Legend -->
+  <g id="legend" transform="translate(500, 520)">
+    <rect width="180" height="110" rx="5" ry="5" fill="white" stroke="#CBD5E1" />
+    <text x="90" y="20" text-anchor="middle" font-family="Arial" font-weight="bold" font-size="14" fill="#1E293B">Legend</text>
+
+    <!-- Legend items -->
+    <rect x="10" y="30" width="20" height="20" rx="3" ry="3" fill="url(#taskGradient)" />
+    <text x="40" y="45" font-family="Arial" font-size="12" fill="#475569">Task</text>
+
+    <rect x="10" y="55" width="20" height="20" rx="3" ry="3" fill="url(#methodGradient)" />
+    <text x="40" y="70" font-family="Arial" font-size="12" fill="#475569">Method</text>
+
+    <rect x="10" y="80" width="20" height="20" rx="3" ry="3" fill="url(#operatorGradient)" />
+    <text x="40" y="95" font-family="Arial" font-size="12" fill="#475569">Operator</text>
+  </g>
+
+  <!-- Domain Structure Description -->
+  <g id="domainStructure" transform="translate(90, 520)">
+    <rect width="350" height="110" rx="5" ry="5" fill="white" stroke="#CBD5E1" />
+    <text x="170" y="20" text-anchor="middle" font-family="Arial" font-weight="bold" font-size="14" fill="#1E293B">Domain Network Structure:</text>
+    <text x="170" y="45" text-anchor="middle" font-family="Arial" font-size="12" fill="#475569">1. Tasks are solved by Methods</text>
+    <text x="170" y="65" text-anchor="middle" font-family="Arial" font-size="12" fill="#475569">2. Methods decompose into Subtasks</text>
+    <text x="170" y="85" text-anchor="middle" font-family="Arial" font-size="12" fill="#475569">3. Subtasks can be primitive (Operators) or complex (Tasks)</text>
+  </g>
+</svg>

@@ -1,216 +1,637 @@
-# Python SHOP2
-
-![Build Status](https://github.com/Teachable-AI-Lab-TAIL/shop2/workflows/Build/badge.svg)
+# PyHTN (Python HTN Planner)
 
 ## Overview
 
-This project implements [SHOP2 (Simple Hierarchical Ordered Planner No. 2)](https://www.cs.umd.edu/~nau/papers/nau2003shop2.pdf) in Python. SHOP2 is a powerful hierarchical task network (HTN) planning system known for its efficiency and effectiveness in handling a variety of planning domains. While SHOP2 was originally designed to directly modify world states during planning (closed-world assumption), this implementation only suggests actions for external programs to execute (open-world). It receives updated states after each action, allowing it to adapt its plan as needed.
+This project implements a reactive, open-world Hierarchical Task Network (HTN) planner in Python. 
+HTN planning is a powerful technique that decomposes high-level tasks into simpler subtasks using a hierarchy of methods and operators. 
+Unlike closed-world planning, where HTNs generally have knowledge of how operators effect the world and can therefore directly modify the world state, open-world
+planning systems generally assume latent actors in the world, which means it's not easy to know exactly how an agent's actions affect the world. This planner is reactive
+in that actions (operators) are executed in the world as they are encountered, the world state is refreshed, and the HTN determines the next appropriate course of action, backtracking if necessary.
 
-## Features
-- **Horn Clause Inference Engine**: Utilizes a Horn clause logic system, allowing for efficient and logical problem-solving capabilities.
-- **Partial Ordering**: Using tuples (unordered) and lists (ordered), the system represents partial ordering within the plan.
-- **Facts**: Supports a Fact notation. For an overview of facts, review [this link](https://github.com/cmaclell/py_rete). Note that the conditions described in the "Productions" section is analogous to preconditions described in this project and so the functionality is the same.
+This planner supports:
+- Hierarchical task decomposition
+- Backtracking when plans fail
+- Comprehensive execution tracing and logging
+- Interactive planning mode
 
-## Prerequisites
+This project draws inspiration from [SHOP2 (Simple Hierarchical Ordered Planner No. 2)](https://www.cs.umd.edu/~nau/papers/nau2003shop2.pdf). 
 
-- Python version >= 3.8
+## Installation
 
-## Installation 
-Clone the repository using the following command:
+Install the package directly from GitHub using pip:
+
+```bash
+pip install git+https://github.com/yourusername/htn-planner.git
 ```
-git clone https://github.com/Teachable-AI-Lab-TAIL/shop2.git
-```
-Alternatively, install the repository using pip with the following command:
-```
-pip install git+https://github.com/Teachable-AI-Lab-TAIL/shop2.git
-```
 
-## Domain Description
-A domain description describes a planning domain and consists of a set of methods and operators and/or axioms, all indexed by the task they help achieve. 
+## Quick Start Guide
 
-### Task
-Task objects are used to link together the various compents of the HTN. Tasks consist of a task name and an optional set of arguments.
+### Creating a Network
 
-This example shows a simple task for multiplying two fractions. It only specifies a name and takes no arguments.
+![HTN network structure](./images/network-diagram.svg)
+
+A network consists of a dictionary mapping task signatures to lists of methods. See the next section for a description of tasks, methods, and operators.
+
 ```python
-from shop2.domain import Task
+from pyhtn.domain.method import NetworkMethod
+from pyhtn.domain.operators import NetworkOperator
+from pyhtn.domain.task import NetworkTask
 
-solve_task = Task('fraction_mult',)
+# Create a simple task network for a robot to make coffee
+network = {
+   # Task signature: "make_coffee/0" (task name/number of arguments)
+   'make_coffee/0': [
+       NetworkMethod(
+           name='make_coffee',
+           subtasks=[
+               NetworkOperator(name='get_mug', effects=[], args=[]),
+               NetworkOperator(name='add_coffee', effects=[], args=[]),
+               NetworkTask(name='heat_water', args=[]),
+               NetworkOperator(name='pour_water', effects=[], args=[]),
+           ],
+           preconditions=[]
+       )
+   ],
+   'heat_water/0': [
+       NetworkMethod(
+           name='heat_water',
+           subtasks=[
+               NetworkOperator(name='fill_kettle', effects=[], args=[]),
+               NetworkOperator(name='turn_on_kettle', effects=[], args=[]),
+               NetworkOperator(name='wait_for_boil', effects=[], args=[]),
+           ],
+           preconditions=[]
+       )
+   ]
+}
 ```
 
-This example shows a task for adding two numbers. It specifies a name and takes three variablized arguments, namely the field names containing the numbers to be added (a and b) and the field name of the answer box to put the result in.
+### Tasks
+
+There are two main types of task classes:
+
+1. **NetworkTask**: Represents tasks in the network definition with potential variable arguments.
+2. **GroundedTask**: Represents concrete task instances with specific arguments to be executed.
+
+Tasks are the fundamental units that the planner tries to accomplish, and consist of:
+- A name
+- A list of arguments (can be variables or concrete values)
+
+Example:
 ```python
-from shop2.domain import Task
+from pyhtn.domain.task import NetworkTask, GroundedTask
+from pyhtn.domain.variable import V
 
-add_task = Task('add', V('a'), V('b'), V('c'))
+# Task with variable arguments
+network_task = NetworkTask(name="move", args=(V("source"), V("destination")))
 ```
 
-### Method
-Methods are what add hierarchy to HTNs and decompose tasks into subtasks. Methods consists of a _head_, a set of _preconditions_, and a list of _subtasks_. The head defines the task the method achieves as well as any arguments to be passed in. The preconditions define a set of _Facts_ that must be true in the world state for this method to be applicable. Finally, subtasks are represented by a list of Task objects.
+GroundedTasks are primarily used internally to the planner, for example when specifying tasks to plan for, or when 
+propagating arguments from a method execution to a subtask. You will generally not need to interface with them.
 
-The below example shows a method for completing a fraction multiplication problem where there are two fraction operands. We see that the method decomposes the task of solving a fraction multiplcation problem into the two tasks of multiplying the numerators and then the denominators, respectively. 
+### Methods
+
+Methods define how to decompose tasks into subtasks. A method has:
+- A name (currently, must be the same as the parent task)
+- Preconditions (conditions that must be true for the method to be applicable)
+- A list of subtasks (NetworkTasks and NetworkOperators) that accomplish the task 
+
+There are two method classes:
+1. **NetworkMethod**: Methods as defined in the network
+2. **GroundedMethod**: Methods with grounded/bound variables
+
+Example:
 ```python
-from shop2.common import V
-from shop2.domain import Method
-from shop2.fact import Fact
+from pyhtn.domain.method import NetworkMethod
+from pyhtn.domain.task import NetworkTask
+from pyhtn.domain.variable import V
 
-fraction_mult_method = Method(head=('fraction_mult',),
-                              preconditions=(Fact(field=V('num1'), value=V('num1_val')) &
-                                             Fact(field=V('num2'), value=V('num2_val')) &
-                                             Fact(field=V('denom1'), value=V('denom1_val')) &
-                                             Fact(field=V('denom2'), value=V('denom2_val'))),
-                              subtasks=[Task('multiply', V('num1_val'), V('num2_val')), Task('multiply', V('denom1_val'), V('denom2_val'))]
-            ),
+move_method = NetworkMethod(
+    name="move_to_target",
+    args=(V("source"), V("destination")),
+    preconditions=None,
+    subtasks=[
+        NetworkTask(name="walk", args=(V("source"), V("destination")))
+    ]
+)
 ```
-#### Facts
-Methods (and operators) use the Fact notation to define preconditions. Facts represent the basic units of knowledge that methods and operators use to match to a world state and generally represent an environment object in whole or in part. For example, given the following environment state in "shapes world" (a list of dictionary objects describing shapes):
 
+This code defines a method *move_to_target* and can be used for a task of the same name. It has no preconditions, meaning
+it is always applicable, takes two arguments, a *source* and a *destination*, and has one subtask, *walk*. Plainly, this method 
+indicates that it can achieve the task of moving to a target by using the strategy: walk there. During planning, the argument variables will 
+be bound to the input values and subsequently propagated to the sole subtask, *walk* (note that the method argument variables and 
+the task argument variables share the same name. This is why the values are propagated in this way. See () for more details).
+
+Like tasks, GroundedMethods are used internally to the planner.
+
+### Operators
+
+Operators represent primitive actions that can be executed directly. They have:
+- A name
+- A list of arguments
+- Preconditions
+- Effects (changes to the state when executed)
+
+Like methods, operators exist in two forms:
+1. **NetworkOperator**: Defined in the network with variables
+2. **GroundedOperator**: Operators with specific bindings
+
+Example:
+```python
+from pyhtn.conditions.fact import Fact
+from pyhtn.domain.operators import NetworkOperator
+from pyhtn.domain.variable import V
+
+walk_operator = NetworkOperator(
+    name="walk",
+    args=(V("source"), V("destination")),
+    preconditions=Fact(agent_at=V("source")) & Fact(connected=V("source"), to=V("destination")),
+    effects=[]
+)
 ```
-state = [
-    {
-        "type": "circle",
-        "color": "blue",
-        "size": "small"
-      },
-    {
-        "type": "square",
-        "color": "red",
-        "size": "large"
-    }
+
+This code defines a primitive operator *walk* that can be executed directly. It takes two arguments: *source* and *destination*. The preconditions specify that this operator is only applicable when the agent is at the source location and there's a connection from the source to the destination. In this example, no effects are specified as they would be handled by the environment executing the action. During planning, when this operator is encountered and its preconditions are satisfied, the planner will execute the walk action with the bound argument values.
+
+### Instantiating a Planner
+
+```python
+from pyhtn.planner.planner import HtnPlanner
+
+# Create a simple environment that manages the state
+class Environment:
+    def __init__(self, initial_state):
+        self.state = initial_state
+        
+    def get_state(self):
+        return self.state
+        
+    def execute_action(self, action_name, action_args):
+        print(f"Executing: {action_name} with args {action_args}")
+        # Update state based on action
+        if action_name == "grind_beans":
+            self.state.append({"has_ground_coffee": True})
+        elif action_name == "heat_water":
+            self.state.append({"has_hot_water": True})
+        elif action_name == "brew_coffee":
+            self.state.append({"has_coffee": True})
+        return True
+
+# Initial state
+initial_state = [
+    {"has_coffee_beans": True},
+    {"has_water": True}
 ]
-```
-We can define a fact representing the first object as:
-```
-precondition = Fact(type="circle", color="blue", size="small")
-```
-and using this fact as a precondition for a method would match the given world state. If we instead define a precondition that requires another shape object, triangle, the precondition would no longer match (since the world state contains no triangles).
-```
-precondition = Fact(type="circle", color="blue", size="small") & Fact(type="triangle")
-```
-Note that the second fact did not need to specify all attributes found in other shape objects. Essentially, the previous precondition says to match when "there is a small, blue circle and a triangle" in the state (color and size of triangle does not matter).
 
-#### Filters
-It is also possible to employ functional tests (lambdas or functions) using `Filter` conditions. Filter conditions allow you to filter out matches by defining rules on variables defined in facts that come before.
-For example, we will modify the preconditions of the fraction multiplication method to ensure that the two numerator conditions do not match to the same numerator field (and same for the denominators):
+# Create environment
+env = Environment(initial_state)
 
+# Create planner with key options
+planner = HtnPlanner(
+    network=network,
+    env=env,
+    enable_logging=True,     # Enable detailed logging
+    log_dir="logs/planner.log"  # Log directory
+)
 ```
-fraction_mult_method = Method(head=('fraction_mult',),
-                              preconditions=(Fact(field=V('num1'), value=V('num1_val')) &
-                                             Fact(field=V('num2'), value=V('num2_val')) &
-                                             Filter(lambda num1, num2: num1 != num2) &
-                                             Fact(field=V('denom1'), value=V('denom1_val')) &
-                                             Fact(field=V('denom2'), value=V('denom2_val')) &
-                                             Filter(lambda denom1, denom2: denom1 != denom2)),
-                              subtasks=[Task('multiply', V('num1_val'), V('num2_val')), Task('multiply', V('denom1_val'), V('denom2_val'))]
-            )
-```
-#### Logical Operators
-There are multiple ways to combine facts to create complex preconditions. 
-**AND**: To specify that a set of facts must **all** match to the world state in order for a precondition to be met, you can use the shop2.conditions.AND class or the ampersand (&) operator:
-```
-precondition = AND((Fact(type="circle", color="blue", size="small"), Fact(type="triangle", color="blue", size="medium")))
-```
-or
-```
-precondition = Fact(type="circle", color="blue", size="small") & Fact(type="triangle", color="blue", size="medium")
-```
-**OR**:  To be documented soon.
 
-**NOT**: To be documented soon.
+In this code, we first create an Environment class that manages the world state and handles action execution. The environment is required by the planner because it follows an open-world model where actions are executed as they're encountered rather than just simulated. The environment must implement two key methods:
 
-Below are some examples of additional ways to define facts. 
+1. `get_state()`: Returns the current world state for the planner to check preconditions
+2. `execute_action(action_name, action_args)`: Executes actions in the world and returns success/failure
 
-1. *Facts* are a subclass of dict, so you can treat them similar to dictionaries.
+If no environment is provided, the planner will raise an error, as it needs a way to retrieve the current state and execute actions. The planner is then initialized with the task network, environment, and optional parameters for logging. This creates a planning system ready to receive tasks and generate plans.
+
+## Planner Parameters
+
+| Parameter        | Description                                                                  | Default  |
+|------------------|------------------------------------------------------------------------------|----------|
+| network          | Dictionary mapping task signatures to list of methods                        | Required |
+| tasks            | Initial list of tasks to plan for                                            | None     |
+| env              | Environment that manages the state and executes actions. Currently required. | Required |
+| repeat_wait_time | Time to wait before processing a repeated task                               | 0.1      |
+| enable_logging   | Whether to enable detailed logging                                           | False    |
+| log_dir          | Path to file to send logs to                                                 | None     |
+
+### Using the Planner
 
 ```python
->>> f = Fact(a=1, b=2)
->>> f['a']
-1
+# Add tasks to plan for
+planner.add_tasks([
+    {"name": "make_coffee", "arguments": [], "priority": "high"}
+])
+
+# Generate a complete plan
+try:
+    plan = planner.plan()
+    print("Plan successfully generated!")
+except Exception as e:
+    print(f"Planning failed: {e}")
+
+# Print the final plan
+planner.print_current_plan()
+
+# Print the detailed trace
+planner.print_current_trace(include_states=True)
 ```
 
-2. *Facts* extend dictionaries, so they also support positional values without
-   keys. These values are assigned numerical indices based on their position.
+This code demonstrates how to use the planner once it's been instantiated. First, we add a task to make coffee with high priority. Tasks can be added with different priorities (first, low, medium, high) that determine their execution order. When we call `plan()`, the planner begins decomposing tasks and executing operators through the environment. If planning succeeds, it returns a list of operators that were executed. If it fails (e.g., no applicable methods or operator execution fails), an exception is raised.
+
+At any time we can print the current plan (the sequence of operators executed) and the trace (detailed log of the planning process including task decompositions, method selections, operator executions, and backtracks). The trace is particularly useful for debugging and understanding the planner's decision-making process.
+
+## Key Planner Functions
+
+This section describes the key functions available in the HtnPlanner class. Each function helps with different aspects of the planning process, from task management to plan execution and debugging.
+
+### Table of Contents
+
+- [add_method](#add_method)
+- [add_tasks](#add_tasks)
+- [apply_method_application](#apply_method_application)
+- [clear_tasks](#clear_tasks)
+- [get_current_plan](#get_current_plan)
+- [get_current_trace](#get_current_trace)
+- [get_next_method_application](#get_next_method_application)
+- [plan](#plan)
+- [print_current_plan](#print_current_plan)
+- [print_current_trace](#print_current_trace)
+- [print_network](#print_network)
+- [reset](#reset)
+
+Let's explore these functions using this coffee-making network:
 
 ```python
->>> f = Fact('a', 'b', 'c')
->>> f[0]
-'a'
+from pyhtn.conditions.fact import Fact
+from pyhtn.domain.variable import V
+from pyhtn.domain.method import NetworkMethod
+from pyhtn.domain.operators import NetworkOperator
+from pyhtn.domain.task import NetworkTask
+from pyhtn.planner.planner import HtnPlanner
+
+# Example network for making coffee
+network = {
+   # Task signature: "make_coffee/0" (task name/number of arguments)
+   'make_coffee/0': [
+       NetworkMethod(
+           name='make_coffee',
+           subtasks=[
+               NetworkOperator(name='get_mug', effects=[], args=[]),
+               NetworkOperator(name='add_coffee', effects=[], args=[]),
+               NetworkTask(name='heat_water', args=[]),
+               NetworkOperator(name='pour_water', effects=[], args=[]),
+           ],
+           preconditions=[]
+       )
+   ],
+   'heat_water/0': [
+       NetworkMethod(
+           name='heat_water',
+           subtasks=[
+               NetworkOperator(name='fill_kettle', effects=[], args=[]),
+               NetworkOperator(name='turn_on_kettle', effects=[], args=[]),
+               NetworkOperator(name='wait_for_boil', effects=[], args=[]),
+           ],
+           preconditions=[]
+       )
+   ]
+}
+
+# Simple environment
+class SimpleEnv:
+    def __init__(self):
+        self.state = []
+        
+    def get_state(self):
+        return self.state
+        
+    def execute_action(self, action_name, action_args):
+        print(f"Executing: {action_name}")
+        return True
+
+# Create planner
+env = SimpleEnv()
+planner = HtnPlanner(domain=network, env=env, enable_logging=False)
 ```
 
-3. *Facts* can support mixed positional and named arguments, but positional
-   must come before named and named arguments do not get positional references.
+### add_method
+
+Adds a new method to the domain network. This is useful for dynamically extending the planner's capabilities without recreating the entire network.
 
 ```python
->>> f = Fact('a', 'b', c=3, d=4)
->>> f[0]
-'a'
->>> f['c']
-3
+# Add a new method to the network
+new_method = planner.add_method(
+    task_name="clean_up",
+    task_args=(),
+    preconditions=[],
+    subtasks=[
+        NetworkOperator(name='wash_mug', effects=[], args=[])
+    ]
+)
+
+print("Method added:", new_method.name)
+print("network keys:", list(planner.domain_network.keys()))
 ```
 
-5. *Facts* support nesting with other facts. 
+Output:
+```
+Method added: clean_up
+network keys: ['make_coffee/0', 'heat_water/0', 'clean_up/0']
+```
+
+[Back to Table of Contents](#table-of-contents)
+
+### add_tasks
+
+Adds new tasks to the planner's queue. Tasks will be planned for in the order determined by their priority.
 
 ```python
->>> f = Fact(subfact=Fact())
-Fact(subfact=Fact())
+# Add a task to make coffee
+planner.add_tasks([
+    {"name": "make_coffee", "arguments": [], "priority": "high"}
+])
+
+print("Root tasks:", [task.name for task in planner.root_tasks])
 ```
 
-### Operator
-Operators define the fundamental actions the planning system can take. Operators consist of a head, a set of preconditions, and a set of _effects_ that result from the application of an operator. The effects, in this implementation, are currently not used but will be revisited in the near future.
-
-The below example shows an HTN operator for multiplying two numbers in a web-based, tutoring system interface. The operator expects 3 variablized arguments: f1 and f2 (the field names containing the two values to multiply) and f3 (the field name of the interface element to put the result). The preconditions will match against the two fields in the tutor interface (f1 and f2) and their corresponding values (vf1 and vf2). The effects use these bindings to calculate the result of the multiplication and return this as an effect. 
-```python
-from shop2.common import V
-from shop2.domain import Operator
-from shop2.fact import Fact
-
-multiply_op = Operator(head=('multiply', V('f1'), V('f2'), V('f3')),
-                       preconditions=(Fact(field=V('f1'), value=V('vf1'))&
-                                      Fact(field=V('f2'), value=V('vf2'))),
-                       effects=Fact(field=V('f3'), value=(lambda x,y: x*y, V('vf1'), V('vf2')))),
+Output:
+```
+Root tasks: ['make_coffee']
 ```
 
-### Axioms
-Axioms are implemented but not currently documented. See shop2/domain.py.
+[Back to Table of Contents](#table-of-contents)
 
 
-In this project, the domain description is represented by a dictionary where the keys specify tasks and the number of arguments (e.g. `multiply/2`) and the values are a list of relevant methods or operators. For an example of a domain and additional examples of tasks, methods, and operators, refer to [run.py](https://github.com/Teachable-AI-Lab/shop2/blob/main/run.py). 
+### clear_tasks
 
-
-## Planner
-The planner runs as a coroutine in a separate process. Given an initial state, domain, and tasks, it iteratively suggests operators and their argument bindings. The driver program applies these to the environment and returns the resulting state to the planner. This continues until either all tasks are completed (resulting in a `StopException`) or no valid plan can be found (resulting in a `FailedPlanException`).
+Removes all tasks from the planner's queue. Useful when you want to restart planning with a different set of tasks without resetting the entire planner.
 
 ```python
-from shop2.planner import planner
-
-domain = {
-        "add/0": [
-            Operator(head=('add', V('a'), V('b'), V('c')),
-                     preconditions=(Fact(field=V('a'), value=V('va')) &
-                                    Fact(field=V('b'), value=V('vb'))),
-                     effects=Fact(field=V('c'), value=(lambda x, y: x + y, V('va'), V('vb')))),
-
-        ]
-    }
-state = Fact(field='operand1', value=10) & Fact(field='operand2', value=12) & Fact(field='answer_box', value=)
-tasks = [Task('add',)]
-plan = planner(state, tasks, domain)
-
-action_name, action_args = plan.send(None)
-
-# At this point, the driver program would need to do the addition and apply it to the environment. However, in the near future the planner will support performing these operations directly in the effects and returning them to the driver.
-action_name -> add
-action_args -> (10, 12, null)
+# Clear all tasks
+planner.clear_tasks()
+print("Root tasks after clearing:", len(planner.root_tasks))
 ```
 
-## Commands
+Output:
 ```
-python run.py
+Root tasks after clearing: 0
 ```
 
-## Contact Information
+[Back to Table of Contents](#table-of-contents)
 
-For support, questions, or contributions, please contact us:
+### get_current_plan
 
-- **Email**: [msiddiqui66@gatech.edu](mailto:msiddiqui66@gatech.edu)
-- **GitHub Issues**: [Submit Issue](https://github.com/Teachable-AI-Lab-TAIL/shop2/issues)
+Returns the current plan as a list of operators. This is useful for programmatically accessing the plan rather than just printing it.
+
+```python
+# First add a task and generate a plan
+planner.add_tasks([{"name": "make_coffee", "arguments": []}])
+planner.plan()
+
+# Get the current plan as a list of operators
+current_plan = planner.get_current_plan()
+print("Plan actions:", [op.name for op in current_plan])
+```
+
+Output:
+```
+Executing: get_mug
+Executing: add_coffee
+Executing: fill_kettle
+Executing: turn_on_kettle
+Executing: wait_for_boil
+Executing: pour_water
+Plan actions: ['get_mug', 'add_coffee', 'fill_kettle', 'turn_on_kettle', 'wait_for_boil', 'pour_water']
+```
+
+[Back to Table of Contents](#table-of-contents)
+
+### get_current_trace
+
+Returns the current execution trace. This provides a detailed log of the planning process for analysis or debugging.
+
+```python
+# Get the current execution trace
+trace = planner.get_current_trace(include_states=False)
+print("Trace entries:", len(trace))
+print("First entry type:", trace[0].entry_type if trace else "None")
+```
+
+Output:
+```
+Trace entries: 12
+First entry type: task
+```
+
+[Back to Table of Contents](#table-of-contents)
+
+
+### plan
+
+The core function that generates a complete plan for all tasks in the queue. It decomposes tasks into subtasks, applies methods, and executes operators until all tasks are completed or planning fails.
+
+```python
+# Reset and add a task
+planner.reset()
+planner.add_tasks([{"name": "make_coffee", "arguments": []}])
+
+# Generate a complete plan
+plan = planner.plan()
+print("Plan generated with", len(plan), "actions")
+```
+
+Output:
+```
+Executing: get_mug
+Executing: add_coffee
+Executing: fill_kettle
+Executing: turn_on_kettle
+Executing: wait_for_boil
+Executing: pour_water
+Plan generated with 6 actions
+```
+
+[Back to Table of Contents](#table-of-contents)
+
+### print_current_plan
+
+Prints the current plan in a readable format. This provides a clear view of the sequence of actions that have been executed.
+
+```python
+# Print the current plan
+planner.print_current_plan()
+```
+
+Output:
+```
+┌─────────────────────────────────────────────────┐
+│                 CURRENT PLAN                    │
+└─────────────────────────────────────────────────┘
+Step 01: get_mug()
+Step 02: add_coffee()
+Step 03: fill_kettle()
+Step 04: turn_on_kettle()
+Step 05: wait_for_boil()
+Step 06: pour_water()
+
+Total actions: 6
+────────────────────────────────────────────────────
+```
+
+[Back to Table of Contents](#table-of-contents)
+
+### print_current_trace
+
+Prints the detailed execution trace, showing each step of the planning process. We can use this to understand the planner's decision-making and debug issues.
+
+```python
+# Print the detailed trace
+planner.print_current_trace(include_states=False, max_entries=3)
+```
+
+Output:
+```
+┌─────────────────────────────────────────────────┐
+│                PLANNING TRACE                   │
+└─────────────────────────────────────────────────┘
+001 [14:32:05] [TASK]      Decomposing root task make_coffee
+────────────────────────────────────────────────────
+002 [14:32:05] [METHOD]    Applied method make_coffee to task make_coffee
+     Reason: Method selected as first applicable method
+────────────────────────────────────────────────────
+003 [14:32:05] [OPERATOR]  Executed operator get_mug successfully for task make_coffee
+────────────────────────────────────────────────────
+
+Total entries: 3
+Showing last 3 of 12 entries.
+────────────────────────────────────────────────────
+```
+
+[Back to Table of Contents](#table-of-contents)
+
+### print_network
+
+Prints the structure of the planner's task network, showing tasks, methods, and subtasks. This helps visualize the hierarchical structure of the domain.
+
+```python
+# Print the planner's network structure
+planner.print_network()
+```
+
+Output:
+```
+#####################
+# PLANNER NETWORK #
+#####################
+
+Task(make_coffee, num_args=0)
+	Method(make_coffee, args=())
+		Operator(get_mug, args=[])
+		Operator(add_coffee, args=[])
+		Task(heat_water, args=[])
+		Operator(pour_water, args=[])
+Task(heat_water, num_args=0)
+	Method(heat_water, args=())
+		Operator(fill_kettle, args=[])
+		Operator(turn_on_kettle, args=[])
+		Operator(wait_for_boil, args=[])
+Task(clean_up, num_args=0)
+	Method(clean_up, args=())
+		Operator(wash_mug, args=[])
+```
+
+[Back to Table of Contents](#table-of-contents)
+
+### reset
+
+Resets the planner to its initial state, clearing all tasks, trace information, and the current plan. This is useful when you want to start fresh with the same domain.
+
+```python
+# Reset the planner
+planner.reset()
+print("Planner reset - plan length:", len(planner.get_current_plan()))
+```
+
+Output:
+```
+Planner reset - plan length: 0
+```
+
+[Back to Table of Contents](#table-of-contents)
+
+## Planning Process Flow
+
+```
+                                     +-------------------+
+                                     |  Start Planning   |
+                                     +-------------------+
+                                              |
+                                              v
+                +-------------+     +-------------------+
+                | Root Tasks  |---->| Process Next Task |
+                +-------------+     +-------------------+                                                   
+                                              |                                                         
+                                              v                                                         
+                                     +-------------------+                                                  
+           +-----------------------> | Find Applicable   | <------------------------------------------+      
+           |                         | Methods           |                                            |      
+           |                         +-------------------+                                            |      
+           |                                   |                                                      |      
+           |                                   v                                                      |      
+           |                         +-------------------+     No     +---------------------+         |      
+           |                         | Method Available? |----------->| FailedPlanException |         |      
+           |                         +-------------------+            +---------------------+         |      
+           |                                   |                              |                       |      
+           |                                   | Yes                          | Success               |      
+           |                                   v                              |                       |  
+           |                         +-------------------+                    |                       |  
+           |                         | Apply Method and  |                    |                       |      
+           |                         | Process Subtasks  |--------------------+                       |      
+           |                         +-------------------+                                            |  
+           |                                   |                                                      |
+           |                                   v                                                      |
+           |                         +-------------------+     No      +--------------------+         |
+           |                         | Is Task Primitive?|----------->| Push to Stack and   | --------+
+           |                         | (Operator)        |            | Process Subtask     |
+           |                         +-------------------+            +---------------------+
+           |                                   |
+           |                                   | Yes
+           |                                   |
+           |                                   v
++--------------------+       No     +-------------------+
+| Backtrack to find  | <----------- | Execute Operator  |
+| another method     |              | Successfully?     |            
++--------------------+              +-------------------+
+                                              |
+                                              | Yes
+                                              v
+                                    +-------------------+
+                                    | Update State and  |
+                                    | Move to Next Task |
+                                    +-------------------+
+                                              |
+                                              v
+                                    +-------------------+     No     +-----------------------+
+                                    | All subtasks Done?|----------->| Go to: "Is Task       |
+                                    |                   |            | Primitive? (Operator)"|
+                                    +-------------------+            +-----------------------+
+                                              |
+                                              | Yes
+                                              v
+                                    +-------------------+
+                                    | Return to parent  |
+                                    | context           |
+                                    +-------------------+
+                                              |
+                                              |
+                                              v
+                                    +-------------------+     No     +---------------------+
+                                    | Anymore Root      | ---------> |    StopException    |
+                                    | tasks?            |            +---------------------+
+                                    +-------------------+                           
+                                              |
+                                              | Yes
+                                              v
+                                    +--------------------+
+                                    | Go to:             |
+                                    | "Process Next Task"|           
+                                    +--------------------+        
+```     
