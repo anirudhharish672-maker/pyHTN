@@ -648,6 +648,36 @@ precondition = Fact(type="circle", color="blue", size="small") & Fact(type="tria
 ```
 Note that the second fact did not need to specify all attributes found in other shape objects. Essentially, the previous precondition says to match when "there is a small, blue circle and a triangle" in the state (color and size of triangle does not matter).
 
+Below are some examples of additional ways to define facts. 
+
+1. *Facts* are a subclass of dict, so you can treat them similar to dictionaries.
+
+```python
+>>> f = Fact(a=1, b=2)
+>>> f['a']
+1
+```
+
+2. *Facts* extend dictionaries, so they also support positional values without
+   keys. These values are assigned numerical indices based on their position.
+
+```python
+>>> f = Fact('a', 'b', 'c')
+>>> f[0]
+'a'
+```
+
+3. *Facts* can support mixed positional and named arguments, but positional
+   must come before named and named arguments do not get positional references.
+
+```python
+>>> f = Fact('a', 'b', c=3, d=4)
+>>> f[0]
+'a'
+>>> f['c']
+3
+```
+
 ### Filters
 [Back to Network Components](#network-components)
 
@@ -682,33 +712,5 @@ precondition = Fact(type="circle", color="blue", size="small") & Fact(type="tria
 
 **NOT**: To be documented soon.
 
-Below are some examples of additional ways to define facts. 
 
-1. *Facts* are a subclass of dict, so you can treat them similar to dictionaries.
-
-```python
->>> f = Fact(a=1, b=2)
->>> f['a']
-1
-```
-
-2. *Facts* extend dictionaries, so they also support positional values without
-   keys. These values are assigned numerical indices based on their position.
-
-```python
->>> f = Fact('a', 'b', 'c')
->>> f[0]
-'a'
-```
-
-3. *Facts* can support mixed positional and named arguments, but positional
-   must come before named and named arguments do not get positional references.
-
-```python
->>> f = Fact('a', 'b', c=3, d=4)
->>> f[0]
-'a'
->>> f['c']
-3
-```
 
