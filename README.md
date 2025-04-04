@@ -579,12 +579,12 @@ Planner reset - plan length: 0
            |                         +-------------------+     No     +---------------------+         |      
            |                         | Method Available? |----------->| FailedPlanException |         |      
            |                         +-------------------+            +---------------------+         |      
-           |                                   |                              |                       |      
-           |                                   | Yes                          | Success               |      
-           |                                   v                              |                       |  
-           |                         +-------------------+                    |                       |  
-           |                         | Apply Method and  |                    |                       |      
-           |                         | Process Subtasks  |--------------------+                       |      
+           |                                   |                                                      |      
+           |                                   | Yes                                                  |      
+           |                                   v                                                      |  
+           |                         +-------------------+                                            |  
+           |                         | Apply Method and  |                                            |      
+           |                         | Process Subtasks  |                                            |      
            |                         +-------------------+                                            |  
            |                                   |                                                      |
            |                                   v                                                      |
