@@ -1,6 +1,37 @@
 # PyHTN (Python HTN Planner)
 
+## Table of Contents
+- [Overview](#overview)
+- [Installation](#installation)
+- [Quick Start Guide](#quick-start-guide)
+  - [Creating a Network](#creating-a-network)
+  - [Instantiating a Planner](#instantiating-a-planner)
+  - [Planner Parameters](#planner-parameters)
+  - [Using the Planner](#using-the-planner)
+- [Key Planner Functions](#key-planner-functions)
+  - [add_method](#add_method)
+  - [add_tasks](#add_tasks)
+  - [apply_method_application](#apply_method_application)
+  - [clear_tasks](#clear_tasks)
+  - [get_current_plan](#get_current_plan)
+  - [get_current_trace](#get_current_trace)
+  - [get_next_method_application](#get_next_method_application)
+  - [plan](#plan)
+  - [print_current_plan](#print_current_plan)
+  - [print_current_trace](#print_current_trace)
+  - [print_network](#print_network)
+  - [reset](#reset)
+- [Planning Process Flow](#planning-process-flow)
+- [Network Components](#network-components)
+  - [Tasks](#tasks)
+  - [Methods](#methods)
+  - [Operators](#operators)
+  - [Facts](#facts)
+  - [Filters](#filters)
+  - [Logical Operators](#logical-operators)
+
 ## Overview
+[Back to Table of Contents](#table-of-contents)
 
 This project implements a reactive, open-world Hierarchical Task Network (HTN) planner in Python. 
 HTN planning is a powerful technique that decomposes high-level tasks into simpler subtasks using a hierarchy of methods and operators. 
@@ -17,6 +48,7 @@ This planner supports:
 This project draws inspiration from [SHOP2 (Simple Hierarchical Ordered Planner No. 2)](https://www.cs.umd.edu/~nau/papers/nau2003shop2.pdf). 
 
 ## Installation
+[Back to Table of Contents](#table-of-contents)
 
 Install the package directly from GitHub using pip:
 
@@ -25,12 +57,14 @@ pip install git+https://github.com/yourusername/htn-planner.git
 ```
 
 ## Quick Start Guide
+[Back to Table of Contents](#table-of-contents)
 
 ### Creating a Network
+[Back to Quick Start Guide](#quick-start-guide)
 
 ![HTN network structure](./images/network-diagram.svg)
 
-A network consists of a dictionary mapping task signatures to lists of methods. See the next section for a description of tasks, methods, and operators.
+A network consists of a dictionary mapping task signatures to lists of methods. See section [Network Components](#network-components) for a description of tasks, methods, operators, and other elements needed to construct a network.
 
 ```python
 from pyhtn.domain.method import NetworkMethod
@@ -66,93 +100,8 @@ network = {
 }
 ```
 
-### Tasks
-
-There are two main types of task classes:
-
-1. **NetworkTask**: Represents tasks in the network definition with potential variable arguments.
-2. **GroundedTask**: Represents concrete task instances with specific arguments to be executed.
-
-Tasks are the fundamental units that the planner tries to accomplish, and consist of:
-- A name
-- A list of arguments (can be variables or concrete values)
-
-Example:
-```python
-from pyhtn.domain.task import NetworkTask, GroundedTask
-from pyhtn.domain.variable import V
-
-# Task with variable arguments
-network_task = NetworkTask(name="move", args=(V("source"), V("destination")))
-```
-
-GroundedTasks are primarily used internally to the planner, for example when specifying tasks to plan for, or when 
-propagating arguments from a method execution to a subtask. You will generally not need to interface with them.
-
-### Methods
-
-Methods define how to decompose tasks into subtasks. A method has:
-- A name (currently, must be the same as the parent task)
-- Preconditions (conditions that must be true for the method to be applicable)
-- A list of subtasks (NetworkTasks and NetworkOperators) that accomplish the task 
-
-There are two method classes:
-1. **NetworkMethod**: Methods as defined in the network
-2. **GroundedMethod**: Methods with grounded/bound variables
-
-Example:
-```python
-from pyhtn.domain.method import NetworkMethod
-from pyhtn.domain.task import NetworkTask
-from pyhtn.domain.variable import V
-
-move_method = NetworkMethod(
-    name="move_to_target",
-    args=(V("source"), V("destination")),
-    preconditions=None,
-    subtasks=[
-        NetworkTask(name="walk", args=(V("source"), V("destination")))
-    ]
-)
-```
-
-This code defines a method *move_to_target* and can be used for a task of the same name. It has no preconditions, meaning
-it is always applicable, takes two arguments, a *source* and a *destination*, and has one subtask, *walk*. Plainly, this method 
-indicates that it can achieve the task of moving to a target by using the strategy: walk there. During planning, the argument variables will 
-be bound to the input values and subsequently propagated to the sole subtask, *walk* (note that the method argument variables and 
-the task argument variables share the same name. This is why the values are propagated in this way. See () for more details).
-
-Like tasks, GroundedMethods are used internally to the planner.
-
-### Operators
-
-Operators represent primitive actions that can be executed directly. They have:
-- A name
-- A list of arguments
-- Preconditions
-- Effects (changes to the state when executed)
-
-Like methods, operators exist in two forms:
-1. **NetworkOperator**: Defined in the network with variables
-2. **GroundedOperator**: Operators with specific bindings
-
-Example:
-```python
-from pyhtn.conditions.fact import Fact
-from pyhtn.domain.operators import NetworkOperator
-from pyhtn.domain.variable import V
-
-walk_operator = NetworkOperator(
-    name="walk",
-    args=(V("source"), V("destination")),
-    preconditions=Fact(agent_at=V("source")) & Fact(connected=V("source"), to=V("destination")),
-    effects=[]
-)
-```
-
-This code defines a primitive operator *walk* that can be executed directly. It takes two arguments: *source* and *destination*. The preconditions specify that this operator is only applicable when the agent is at the source location and there's a connection from the source to the destination. In this example, no effects are specified as they would be handled by the environment executing the action. During planning, when this operator is encountered and its preconditions are satisfied, the planner will execute the walk action with the bound argument values.
-
 ### Instantiating a Planner
+[Back to Quick Start Guide](#quick-start-guide)
 
 ```python
 from pyhtn.planner.planner import HtnPlanner
@@ -201,7 +150,8 @@ In this code, we first create an Environment class that manages the world state 
 
 If no environment is provided, the planner will raise an error, as it needs a way to retrieve the current state and execute actions. The planner is then initialized with the task network, environment, and optional parameters for logging. This creates a planning system ready to receive tasks and generate plans.
 
-## Planner Parameters
+### Planner Parameters
+[Back to Quick Start Guide](#quick-start-guide)
 
 | Parameter        | Description                                                                  | Default  |
 |------------------|------------------------------------------------------------------------------|----------|
@@ -213,6 +163,7 @@ If no environment is provided, the planner will raise an error, as it needs a wa
 | log_dir          | Path to file to send logs to                                                 | None     |
 
 ### Using the Planner
+[Back to Quick Start Guide](#quick-start-guide)
 
 ```python
 # Add tasks to plan for
@@ -239,80 +190,12 @@ This code demonstrates how to use the planner once it's been instantiated. First
 At any time we can print the current plan (the sequence of operators executed) and the trace (detailed log of the planning process including task decompositions, method selections, operator executions, and backtracks). The trace is particularly useful for debugging and understanding the planner's decision-making process.
 
 ## Key Planner Functions
+[Back to Table of Contents](#table-of-contents)
 
 This section describes the key functions available in the HtnPlanner class. Each function helps with different aspects of the planning process, from task management to plan execution and debugging.
 
-### Table of Contents
-
-- [add_method](#add_method)
-- [add_tasks](#add_tasks)
-- [apply_method_application](#apply_method_application)
-- [clear_tasks](#clear_tasks)
-- [get_current_plan](#get_current_plan)
-- [get_current_trace](#get_current_trace)
-- [get_next_method_application](#get_next_method_application)
-- [plan](#plan)
-- [print_current_plan](#print_current_plan)
-- [print_current_trace](#print_current_trace)
-- [print_network](#print_network)
-- [reset](#reset)
-
-Let's explore these functions using this coffee-making network:
-
-```python
-from pyhtn.conditions.fact import Fact
-from pyhtn.domain.variable import V
-from pyhtn.domain.method import NetworkMethod
-from pyhtn.domain.operators import NetworkOperator
-from pyhtn.domain.task import NetworkTask
-from pyhtn.planner.planner import HtnPlanner
-
-# Example network for making coffee
-network = {
-   # Task signature: "make_coffee/0" (task name/number of arguments)
-   'make_coffee/0': [
-       NetworkMethod(
-           name='make_coffee',
-           subtasks=[
-               NetworkOperator(name='get_mug', effects=[], args=[]),
-               NetworkOperator(name='add_coffee', effects=[], args=[]),
-               NetworkTask(name='heat_water', args=[]),
-               NetworkOperator(name='pour_water', effects=[], args=[]),
-           ],
-           preconditions=[]
-       )
-   ],
-   'heat_water/0': [
-       NetworkMethod(
-           name='heat_water',
-           subtasks=[
-               NetworkOperator(name='fill_kettle', effects=[], args=[]),
-               NetworkOperator(name='turn_on_kettle', effects=[], args=[]),
-               NetworkOperator(name='wait_for_boil', effects=[], args=[]),
-           ],
-           preconditions=[]
-       )
-   ]
-}
-
-# Simple environment
-class SimpleEnv:
-    def __init__(self):
-        self.state = []
-        
-    def get_state(self):
-        return self.state
-        
-    def execute_action(self, action_name, action_args):
-        print(f"Executing: {action_name}")
-        return True
-
-# Create planner
-env = SimpleEnv()
-planner = HtnPlanner(domain=network, env=env, enable_logging=False)
-```
-
 ### add_method
+[Back to Key Planner Functions](#key-planner-functions)
 
 Adds a new method to the domain network. This is useful for dynamically extending the planner's capabilities without recreating the entire network.
 
@@ -337,9 +220,8 @@ Method added: clean_up
 network keys: ['make_coffee/0', 'heat_water/0', 'clean_up/0']
 ```
 
-[Back to Table of Contents](#table-of-contents)
-
 ### add_tasks
+[Back to Key Planner Functions](#key-planner-functions)
 
 Adds new tasks to the planner's queue. Tasks will be planned for in the order determined by their priority.
 
@@ -357,10 +239,23 @@ Output:
 Root tasks: ['make_coffee']
 ```
 
-[Back to Table of Contents](#table-of-contents)
+### apply_method_application
+[Back to Key Planner Functions](#key-planner-functions)
 
+Steps to the next subtask of a method.
+
+```python
+# First add a task and generate a plan
+planner.add_tasks([{"name": "make_coffee", "arguments": []}])
+planner.plan()
+
+# Get the current plan as a list of operators
+current_plan = planner.get_current_plan()
+print("Plan actions:", [op.name for op in current_plan])
+```
 
 ### clear_tasks
+[Back to Key Planner Functions](#key-planner-functions)
 
 Removes all tasks from the planner's queue. Useful when you want to restart planning with a different set of tasks without resetting the entire planner.
 
@@ -375,9 +270,8 @@ Output:
 Root tasks after clearing: 0
 ```
 
-[Back to Table of Contents](#table-of-contents)
-
 ### get_current_plan
+[Back to Key Planner Functions](#key-planner-functions)
 
 Returns the current plan as a list of operators. This is useful for programmatically accessing the plan rather than just printing it.
 
@@ -402,9 +296,8 @@ Executing: pour_water
 Plan actions: ['get_mug', 'add_coffee', 'fill_kettle', 'turn_on_kettle', 'wait_for_boil', 'pour_water']
 ```
 
-[Back to Table of Contents](#table-of-contents)
-
 ### get_current_trace
+[Back to Key Planner Functions](#key-planner-functions)
 
 Returns the current execution trace. This provides a detailed log of the planning process for analysis or debugging.
 
@@ -421,10 +314,13 @@ Trace entries: 12
 First entry type: task
 ```
 
-[Back to Table of Contents](#table-of-contents)
+### get_next_method_application
+[Back to Key Planner Functions](#key-planner-functions)
 
+Steps to the next applicable method for a task.
 
 ### plan
+[Back to Key Planner Functions](#key-planner-functions)
 
 The core function that generates a complete plan for all tasks in the queue. It decomposes tasks into subtasks, applies methods, and executes operators until all tasks are completed or planning fails.
 
@@ -449,9 +345,8 @@ Executing: pour_water
 Plan generated with 6 actions
 ```
 
-[Back to Table of Contents](#table-of-contents)
-
 ### print_current_plan
+[Back to Key Planner Functions](#key-planner-functions)
 
 Prints the current plan in a readable format. This provides a clear view of the sequence of actions that have been executed.
 
@@ -476,9 +371,8 @@ Total actions: 6
 ────────────────────────────────────────────────────
 ```
 
-[Back to Table of Contents](#table-of-contents)
-
 ### print_current_trace
+[Back to Key Planner Functions](#key-planner-functions)
 
 Prints the detailed execution trace, showing each step of the planning process. We can use this to understand the planner's decision-making and debug issues.
 
@@ -505,9 +399,8 @@ Showing last 3 of 12 entries.
 ────────────────────────────────────────────────────
 ```
 
-[Back to Table of Contents](#table-of-contents)
-
 ### print_network
+[Back to Key Planner Functions](#key-planner-functions)
 
 Prints the structure of the planner's task network, showing tasks, methods, and subtasks. This helps visualize the hierarchical structure of the domain.
 
@@ -538,9 +431,8 @@ Task(clean_up, num_args=0)
 		Operator(wash_mug, args=[])
 ```
 
-[Back to Table of Contents](#table-of-contents)
-
 ### reset
+[Back to Key Planner Functions](#key-planner-functions)
 
 Resets the planner to its initial state, clearing all tasks, trace information, and the current plan. This is useful when you want to start fresh with the same domain.
 
@@ -555,9 +447,8 @@ Output:
 Planner reset - plan length: 0
 ```
 
-[Back to Table of Contents](#table-of-contents)
-
 ## Planning Process Flow
+[Back to Table of Contents](#table-of-contents)
 
 ```
                                      +-------------------+
@@ -634,4 +525,190 @@ Planner reset - plan length: 0
                                     | Go to:             |
                                     | "Process Next Task"|           
                                     +--------------------+        
-```     
+```
+
+## Network Components
+[Back to Table of Contents](#table-of-contents)
+
+### Tasks
+[Back to Network Components](#network-components)
+
+There are two main types of task classes:
+
+1. **NetworkTask**: Represents tasks in the network definition with potential variable arguments.
+2. **GroundedTask**: Represents concrete task instances with specific arguments to be executed.
+
+Tasks are the fundamental units that the planner tries to accomplish, and consist of:
+- A name
+- A list of arguments (can be variables or concrete values)
+
+Example:
+```python
+from pyhtn.domain.task import NetworkTask, GroundedTask
+from pyhtn.domain.variable import V
+
+# Task with variable arguments
+network_task = NetworkTask(name="move", args=(V("source"), V("destination")))
+```
+
+GroundedTasks are primarily used internally to the planner, for example when specifying tasks to plan for, or when 
+propagating arguments from a method execution to a subtask. You will generally not need to interface with them.
+
+### Methods
+[Back to Network Components](#network-components)
+
+Methods define how to decompose tasks into subtasks. A method has:
+- A name (currently, must be the same as the parent task)
+- Preconditions (conditions that must be true for the method to be applicable)
+- A list of subtasks (NetworkTasks and NetworkOperators) that accomplish the task 
+
+There are two method classes:
+1. **NetworkMethod**: Methods as defined in the network
+2. **GroundedMethod**: Methods with grounded/bound variables
+
+Example:
+```python
+from pyhtn.domain.method import NetworkMethod
+from pyhtn.domain.task import NetworkTask
+from pyhtn.domain.variable import V
+
+move_method = NetworkMethod(
+    name="move_to_target",
+    args=(V("source"), V("destination")),
+    preconditions=None,
+    subtasks=[
+        NetworkTask(name="walk", args=(V("source"), V("destination")))
+    ]
+)
+```
+
+This code defines a method *move_to_target* and can be used for a task of the same name. It has no preconditions, meaning
+it is always applicable, takes two arguments, a *source* and a *destination*, and has one subtask, *walk*. Plainly, this method 
+indicates that it can achieve the task of moving to a target by using the strategy: walk there. During planning, the argument variables will 
+be bound to the input values and subsequently propagated to the sole subtask, *walk* (note that the method argument variables and 
+the task argument variables share the same name. This is why the values are propagated in this way. See () for more details).
+
+Like tasks, GroundedMethods are used internally to the planner.
+
+### Operators
+[Back to Network Components](#network-components)
+
+Operators represent primitive actions that can be executed directly. They have:
+- A name
+- A list of arguments
+- Preconditions
+- Effects (changes to the state when executed)
+
+Like methods, operators exist in two forms:
+1. **NetworkOperator**: Defined in the network with variables
+2. **GroundedOperator**: Operators with specific bindings
+
+Example:
+```python
+from pyhtn.conditions.fact import Fact
+from pyhtn.domain.operators import NetworkOperator
+from pyhtn.domain.variable import V
+
+walk_operator = NetworkOperator(
+    name="walk",
+    args=(V("source"), V("destination")),
+    preconditions=Fact(agent_at=V("source")) & Fact(connected=V("source"), to=V("destination")),
+    effects=[]
+)
+```
+
+This code defines a primitive operator *walk* that can be executed directly. It takes two arguments: *source* and *destination*. The preconditions specify that this operator is only applicable when the agent is at the source location and there's a connection from the source to the destination. In this example, no effects are specified as they would be handled by the environment executing the action. During planning, when this operator is encountered and its preconditions are satisfied, the planner will execute the walk action with the bound argument values.
+
+### Facts
+[Back to Network Components](#network-components)
+
+Methods (and operators) use the Fact notation to define preconditions. Facts represent the basic units of knowledge that methods and operators use to match to a world state and generally represent an environment object in whole or in part. For example, given the following environment state in "shapes world" (a list of dictionary objects describing shapes):
+
+```
+state = [
+    {
+        "type": "circle",
+        "color": "blue",
+        "size": "small"
+      },
+    {
+        "type": "square",
+        "color": "red",
+        "size": "large"
+    }
+]
+```
+We can define a fact representing the first object as:
+```
+precondition = Fact(type="circle", color="blue", size="small")
+```
+and using this fact as a precondition for a method would match the given world state. If we instead define a precondition that requires another shape object, triangle, the precondition would no longer match (since the world state contains no triangles).
+```
+precondition = Fact(type="circle", color="blue", size="small") & Fact(type="triangle")
+```
+Note that the second fact did not need to specify all attributes found in other shape objects. Essentially, the previous precondition says to match when "there is a small, blue circle and a triangle" in the state (color and size of triangle does not matter).
+
+### Filters
+[Back to Network Components](#network-components)
+
+It is also possible to employ functional tests (lambdas or functions) using `Filter` conditions. Filter conditions allow you to filter out matches by defining rules on variables defined in facts that come before.
+For example, we will modify the preconditions of the fraction multiplication method to ensure that the two numerator conditions do not match to the same numerator field (and same for the denominators):
+
+```
+fraction_mult_method = Method(head=('fraction_mult',),
+                              preconditions=(Fact(field=V('num1'), value=V('num1_val')) &
+                                             Fact(field=V('num2'), value=V('num2_val')) &
+                                             Filter(lambda num1, num2: num1 != num2) &
+                                             Fact(field=V('denom1'), value=V('denom1_val')) &
+                                             Fact(field=V('denom2'), value=V('denom2_val')) &
+                                             Filter(lambda denom1, denom2: denom1 != denom2)),
+                              subtasks=[Task('multiply', V('num1_val'), V('num2_val')), Task('multiply', V('denom1_val'), V('denom2_val'))]
+            )
+```
+
+### Logical Operators
+[Back to Network Components](#network-components)
+
+There are multiple ways to combine facts to create complex preconditions. 
+**AND**: To specify that a set of facts must **all** match to the world state in order for a precondition to be met, you can use the shop2.conditions.AND class or the ampersand (&) operator:
+```
+precondition = AND((Fact(type="circle", color="blue", size="small"), Fact(type="triangle", color="blue", size="medium")))
+```
+or
+```
+precondition = Fact(type="circle", color="blue", size="small") & Fact(type="triangle", color="blue", size="medium")
+```
+**OR**:  To be documented soon.
+
+**NOT**: To be documented soon.
+
+Below are some examples of additional ways to define facts. 
+
+1. *Facts* are a subclass of dict, so you can treat them similar to dictionaries.
+
+```python
+>>> f = Fact(a=1, b=2)
+>>> f['a']
+1
+```
+
+2. *Facts* extend dictionaries, so they also support positional values without
+   keys. These values are assigned numerical indices based on their position.
+
+```python
+>>> f = Fact('a', 'b', 'c')
+>>> f[0]
+'a'
+```
+
+3. *Facts* can support mixed positional and named arguments, but positional
+   must come before named and named arguments do not get positional references.
+
+```python
+>>> f = Fact('a', 'b', c=3, d=4)
+>>> f[0]
+'a'
+>>> f['c']
+3
+```
+
