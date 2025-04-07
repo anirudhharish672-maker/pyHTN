@@ -35,8 +35,9 @@ class NetworkMethod(NetworkElement):
         index = build_index(ptstate)
         substitutions = unify(task.head, self.head)
         if not self.preconditions:
+            grounded_subtasks = self._create_grounded_subtasks(msubst(substitutions, self.subtasks))
             return GroundedMethod(name=self.name,
-                                  subtasks=msubst(substitutions, self.subtasks),
+                                  subtasks=grounded_subtasks,
                                   matched_facts=[],
                                   args=self.args,
                                   preconditions=self.preconditions,
@@ -52,8 +53,7 @@ class NetworkMethod(NetworkElement):
             matches = [(self.name, theta) for theta in pattern_match(ptcondition, index, substitutions)]
             if matches:
                 method_name, theta = choice(matches)
-                grounded_subtask_args = msubst(theta, self.subtasks)
-                grounded_subtasks = self._create_grounded_subtasks(grounded_subtask_args)
+                grounded_subtasks = self._create_grounded_subtasks(msubst(theta, self.subtasks))
                 matched_facts = tuples_to_dicts(subst(theta, tuple(ptcondition)), use_facts=True, use_and_operator=True)
                 return GroundedMethod(name=self.name,
                                       subtasks=grounded_subtasks,
