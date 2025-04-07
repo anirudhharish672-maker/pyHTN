@@ -7,7 +7,6 @@ import time
 from pyhtn.common.imports.typing import *
 from pyhtn.domain.method import GroundedMethod
 from pyhtn.domain.method import NetworkMethod
-from pyhtn.domain.method_application import MethodApplication
 from pyhtn.domain.operators import GroundedOperator
 from pyhtn.domain.operators import NetworkOperator
 from pyhtn.domain.task import GroundedTask
@@ -519,7 +518,7 @@ class HtnPlanner:
 
         return self.cursor.current_task, [method]
 
-    def apply_method_application(self, task: GroundedTask, method_to_apply: MethodApplication):
+    def apply_method_application(self, task: GroundedTask, method_to_apply: Any):
         """
         Steps to the next subtask of a method.
         :param task: The current task
