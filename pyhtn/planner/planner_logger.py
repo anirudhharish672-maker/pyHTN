@@ -1,3 +1,4 @@
+import inspect
 import os
 import logging
 from time import strftime
@@ -100,6 +101,21 @@ class PlannerLogger:
         task_status = task_node.status
         
         self.info(f"Task: {task_name} (args: {task_args}, id: {task_id}, status: {task_status})")
+
+    def log_function(self):
+        # Get the frame of the calling function
+        frame = inspect.currentframe().f_back
+
+        # Get function name
+        function_name = frame.f_code.co_name
+
+        # Get argument names and values
+        args, _, _, local_vars = inspect.getargvalues(frame)
+        args_list = [f"{arg}={repr(local_vars[arg])}" for arg in args]
+        args_str = ", ".join(args_list)
+
+        # Print function name with arguments
+        self.info(f"Entering {function_name}({args_str})")
     
     def log_method_application(self, task_node, method_node, subtasks):
         """
