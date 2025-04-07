@@ -303,7 +303,7 @@ class HtnPlanner:
         if self.enable_logging:
             self.logger.info("Starting automated planning")
 
-        if not self.root_tasks:
+        if not self.root_tasks and not self.cursor.current_task:
             if self.enable_logging:
                 self.logger.error("No tasks to plan for")
             raise StopException("There are no tasks to plan for")
