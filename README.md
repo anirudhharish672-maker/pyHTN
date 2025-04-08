@@ -378,7 +378,7 @@ Prints the detailed execution trace, showing each step of the planning process. 
 
 ```python
 # Print the detailed trace
-planner.print_current_trace(include_states=False, max_entries=3)
+planner.print_current_trace(include_states=False, max_entries=6)
 ```
 
 Output:
@@ -393,9 +393,16 @@ Output:
 ────────────────────────────────────────────────────
 003 [14:32:05] [OPERATOR]  Executed operator get_mug successfully for task make_coffee
 ────────────────────────────────────────────────────
+004 [14:32:05] [OPERATOR]  Executed operator add_coffee successfully for task make_coffee
+────────────────────────────────────────────────────
+005 [14:32:05] [TASK]      Decomposing task heat_water as subtask of make_coffee
+────────────────────────────────────────────────────
+006 [14:32:05] [METHOD]    Applied method heat_water to task heat_water
+     Reason: Method selected as first applicable method
+────────────────────────────────────────────────────
 
-Total entries: 3
-Showing last 3 of 12 entries.
+Total entries: 6
+Showing last 6 of 12 entries.
 ────────────────────────────────────────────────────
 ```
 
