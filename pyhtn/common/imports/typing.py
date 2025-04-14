@@ -8,6 +8,7 @@ from typing import Optional
 from typing import Set
 from typing import Tuple
 from typing import Union
+from typing import Sequence
 
 
 
