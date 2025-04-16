@@ -30,6 +30,7 @@ class HTN_Element(ABC):
                  args: Sequence[Union[Var, Any]] = (),
                  cost=1.0) -> None:
 
+        
         self.name = name
         self.args = tuple(args)
         self.cost = cost
@@ -52,8 +53,8 @@ class MatchableMixin(ABC):
     def _get_match_substitutions(self, task_exec, state):
         ptstate = dict_to_tuple(state)
         index = build_index(ptstate)
-        substitutions = unify(task_exec.args, self.args)
-        print(task_exec.args, self.args)
+        substitutions = unify(task_exec.match, self.args)
+        # print(task_exec.match, self.args)
 
         # Find the substitutions for each match
         if(not self.preconditions):
@@ -65,9 +66,9 @@ class MatchableMixin(ABC):
 
         return match_substs
 
-    @abstractmethod
-    def get_match_executions(self, task_exec, state):
-        raise NotImplementedError('Subclasses must implement this method.')
+    # @abstractmethod
+    # def get_match_executions(self, task_exec, state):
+    #     raise NotImplementedError('Subclasses must implement this method.')
 
 
 
@@ -92,7 +93,7 @@ class Operator(HTN_Element, MatchableMixin):
             args = _args
 
         super().__init__(name, args, cost)
-        self.id = name
+        self.id = f"O_{rand_uid()}"
 
         if(len(args) == 0):
             args = _args
@@ -133,15 +134,15 @@ class Operator(HTN_Element, MatchableMixin):
         from pyhtn.htn.element_executions import OperatorEx
 
         match_substs = self._get_match_substitutions(task_exec, state)
-        print(task_exec, match_substs)
 
         # Make Method exections and Task executions from each match.
         op_execs = []
         for m_subst in match_substs:
             op_execs.append(
                 OperatorEx(
-                    self, subst(m_subst, self.args),
-                    parent_exec=task_exec,
+                    self, state,
+                    subst(m_subst, self.args),
+                    parent_task_exec=task_exec,
                 )
             )
             
@@ -158,18 +159,26 @@ class Task(HTN_Element):
                  name: str,
                  *_args : Union[Var, Any],
                  args: Sequence[Union[Var, Any]] = (),
-                 cost=1.0):
+                 cost=1.0,
+                 priority='first',
+                 repeat=1):
 
         if(len(args) == 0):
             args = _args
 
-        self.id = name
-        self.name = name
-        self.args = args
-        self.id = f'{self.name}/{len(self.args)}'
-        # self.head = (self.name, *self.args)
-
         super().__init__(name, args, cost)
+        self.id = f"T_{rand_uid()}"
+
+        self.domain_key = f'{name}/{len(args)}'
+        self.priority = priority
+        self.repeat = repeat
+
+    def as_task_exec(self, state):
+        '''Create a task execution from a task by taking its
+            arguments as its match and fixing it to a state.
+        '''
+        from pyhtn.htn.element_executions import TaskEx
+        return TaskEx(self, state, self.args)
 
     def __str__(self):
         if(len(self.args) > 0):
@@ -178,6 +187,10 @@ class Task(HTN_Element):
             return f"Task({self.name!r})"
 
     __repr__ = __str__
+
+    def get_child_executions(self, domain, state):
+        task_exec = self.as_task_exec(state)
+        return task_exec.get_child_executions(domain, state)
 
 # ------------------------------------------------------
 # : Method
@@ -194,34 +207,11 @@ class Method(HTN_Element, MatchableMixin):
         if(len(args) == 0):
             args = _args
 
-        self.id = name
-
-        # if(isinstance(task, str)):
-        #     self.task_name = task
-        #     self.task_args = ()
-        # elif(isinstance(task, (tuple, list))):
-        #     self.task_name = task[0]
-        #     self.task_args = tuple(task[1:])
-        # elif(isinstance(task, Task)):
-        #     self.task_name = task.name
-        #     self.task_args = task.args
-        #     self._task = task
-
-        # Default to using the Task's arguments 
-        # if(args is None):
-        #     args = self.task_args
-
-        # But it should be possible for the method to have 
-        #  args beyond what the parent task provides. For
-        #  instance, we might want to bind subtask variables
-        #  as part of the method's preconditions.
-        self.args = args
-
         super().__init__(name, args, cost)
+        self.id = f"M_{rand_uid()}"
+
         self.subtasks = subtasks
         self.preconditions = preconditions
-
-        self.id = f"M_{rand_uid()}"
 
     @property
     def task():
@@ -246,9 +236,7 @@ class Method(HTN_Element, MatchableMixin):
     __repr__ = __str__
 
 
-    def get_match_executions(self, 
-        task_exec, 
-        state): #, plan, visited):
+    def get_match_executions(self, task_exec, state):
 
         ''' Get all Method exectutions that match the Method's preconditions
             given a parent Task execution.
@@ -258,31 +246,21 @@ class Method(HTN_Element, MatchableMixin):
 
         match_substs = self._get_match_substitutions(task_exec, state)
 
-        # ptstate = dict_to_tuple(state)
-        # index = build_index(ptstate)
-        # substitutions = unify(task_exec.args, self.args)
-
-        # # Find the substitutions for each match
-        # if(not self.preconditions):
-        #     match_substs = [substitutions] 
-        # else:
-        #     # Danny Question: When would there ever be multiple self.preconditions?
-        #     ptcondition = fact_to_tuple(self.preconditions, variables=True)[0]
-        #     match_substs = [x for x in pattern_match(ptcondition, index, substitutions)]
-
         # Make Method exections and Task executions from each match.
         meth_execs = []
         for m_subst in match_substs:
             meth_exec = MethodEx(
-                self, subst(m_subst, self.args),
-                parent_exec=task_exec,
+                self, state,
+                subst(m_subst, self.args),
+                parent_task_exec=task_exec,
             )
             subtask_execs = []
             for subtask in self.subtasks:
                 subtask_execs.append(
                     TaskEx(
-                        subtask, subst(m_subst, subtask.args),
-                        parent_exec=meth_exec,
+                        subtask, state,
+                        subst(m_subst, subtask.args),
+                        parent_method_exec=meth_exec,
                     )
                 )
             meth_exec.child_execs = subtask_execs

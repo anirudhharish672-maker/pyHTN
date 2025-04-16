@@ -1,4 +1,5 @@
 from pyhtn.htn.htn_elements import Method, Operator, Task
+from pyhtn.htn.planner2 import HtnPlanner2
 from pyhtn.conditions.fact import Fact
 from pyhtn.conditions.conditions import NOT
 from pyhtn.domain.variable import V
@@ -38,8 +39,8 @@ domain = {
         ]
     ),
 
-    'fill_with_water' : Operator('fill', 
-        args=[V("container")],
+    'fill' : Operator('fill', 
+        args=[V("container"), V('liquid')],
         effects=[
             Fact(container=V("container"), liquid_contents=V('liquid'))
         ]
@@ -61,15 +62,15 @@ domain = {
 
     #  ----  METHODS -------
 
-    'make_coffee/0': [
+    'make_coffee': [
         Method(
             'make_coffee',
 
-            # Heat water is NOT primative
+            # heat_water_with is NOT primative
             subtasks=[
                 Task('get', 'mug'),
                 Task('add', 'mug', 'coffee'),
-                Task('heat', 'water'),
+                Task('heat_water_with', 'kettle'), # Non-Prim
                 Task('pour', 'mug', 'water'),
             ],
             preconditions=[]
@@ -80,19 +81,18 @@ domain = {
             # All of these are primative 
             subtasks=[
                 Task('get', 'cup'),
+                Task('fill', 'cup', 'water'),
                 Task('add_instant_coffee', 'cup'),
-                Task('heat_water_with', 'kettle'), # Non-Prim
-                Task('pour', 'kettle', 'mug',),
             ],
             preconditions=[]
         )
     ],
 
-    'heat_water_with/1': [
+    'heat_water_with': [
         Method(
             'heat_water_with', V('container'),
             subtasks=[
-                Task('fill_with_water', V('container'),),
+                Task('fill', V('container'), 'water'),
                 Task('turn_on', V('container'),),
                 Task('wait_for_boil', V('container'),),
             ],
@@ -104,19 +104,40 @@ domain = {
 
 state = [{"id" : "me", "name" : "Bob"}]
 
-heat_water_with = domain['heat_water_with/1'][0]
-fill_with_water = domain['fill_with_water']
+heat_water_with = domain['heat_water_with'][0]
+fill_with_water = domain['fill']
 
-task = Task('fill_with_water', "kettle")
-op_execs = fill_with_water.get_match_executions(task, state)
-print(op_execs)
+task_exec = Task('fill', "kettle", 'water').as_task_exec(state)
+op_execs = fill_with_water.get_match_executions(task_exec, state)
+print("op_execs:", op_execs)
+op_execs = task_exec.get_child_executions(domain, state)
+print("op_execs:", op_execs)
 
-task = Task('heat_water_with', "kettle")
-method_execs = heat_water_with.get_match_executions(task, state)
-
+task_exec = Task('heat_water_with', "kettle").as_task_exec(state)
+method_execs = heat_water_with.get_match_executions(task_exec, state)
 print(method_execs)
-# env = env = MagicMock()
-# env.get_state.return_value = [{'id': '1', 'type': 'location', 'name': 'kitchen'}]
+method_execs = task_exec.get_child_executions(domain, state)
+print(method_execs)
+
+
+
+
+
+
+
+env = env = MagicMock()
+env.get_state.return_value = [{'id': '1', 'type': 'location', 'name': 'kitchen'}]
+planner = HtnPlanner2(
+    tasks = [{'name': 'make_coffee', 'args': []}],
+    domain = domain,
+    env = env,
+    enable_logging=True
+)
+
+planner.plan()
+
+
+# print(planner.get_next_method_execution())
 
 
 # HtnPlanner(
