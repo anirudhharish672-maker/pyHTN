@@ -17,7 +17,7 @@ from pyhtn.htn import Task, Method, Operator, TaskEx, MethodEx, OperatorEx
 from pyhtn.exceptions import FailedPlanException, StopException
 from pyhtn.validation import validate_domain, validate_tasks
 from pyhtn.planner.planner_logger import PlannerLogger
-from pyhtn.planner.trace import Trace
+from pyhtn.planner.trace import Trace, TraceKind
 
 
 
@@ -96,13 +96,15 @@ class FrameContext:
         )
 
     @classmethod
-    def new_frame(self, task_exec, method_execs):
+    def new_frame(self, task_exec, method_execs, 
+                    method_index=0,
+                    subtask_index=0):
         return FrameContext(
             task_exec =                  task_exec,
             possible_method_execs =      method_execs,
-            method_exec_index =  0, 
+            method_exec_index =          method_index, 
             visted_method_exec_indices = [],
-            subtask_exec_index = 0,
+            subtask_exec_index =         subtask_index,
             visted_subtask_exec_indices = []
         )
 
@@ -126,13 +128,14 @@ class FrameContext:
 class Cursor:
     def __init__(self):
         # Current task execution being processed
+        self.trace = Trace()
         self.reset()
 
     def reset(self):
         self.current_frame = None
         self.stack = []
 
-    def is_exhausted(self):
+    def is_at_end(self):
         return self.current_frame is None
 
 
@@ -157,7 +160,7 @@ class Cursor:
         self.stack.pop()
         return self.current_frame
 
-    def advance_subtask(self):
+    def advance_subtask(self, trace=None):
         ''' Try to move the cursor to the next position by: 
                 1. Moving it laterally to the next subtask
                 2. Popping up the stack if at last subtask in method
@@ -167,40 +170,67 @@ class Cursor:
         ''' 
         while True:
             # Advance to next subtask exececution in current MethodEx
+            curr_frame = self.current_frame
             next_frame = self.current_frame.next_subtask_frame()
             if(next_frame is not None):
+                if(trace):
+                    trace.add(TraceKind.ADVANCE_SUBTASK, curr_frame, next_frame)
                 break
-
+            
             # If subtask sequence exhasted try popping frame from stack
+            curr_frame = next_frame
             next_frame = self._pop_frame()
             if(next_frame is None):
                 break
+            if(trace):
+                trace.add(TraceKind.POP_FRAME, curr_frame, next_frame)
+                
 
         self.current_frame = next_frame
 
-    def push_task_exec(self, task_exec, method_execs):
+    def push_task_exec(self, task_exec, method_execs, method_ind=0, trace=None):
         ''' Recurse into a new frame from a task execution and
             its list of method executions
         ''' 
+        # Push current frame 
         if(self.current_frame is not None):
             self.stack.append(self.current_frame)
 
-        self.current_frame = FrameContext.new_frame(task_exec, method_execs)
+        # Make a new frame pointing at the selected MethodEx
+        curr_frame = self.current_frame
+        next_frame = FrameContext.new_frame(task_exec, method_execs, method_ind)
+        if(trace):
+            trace.add(TraceKind.SELECT_METHOD, curr_frame, next_frame)
+            trace.add(TraceKind.ENTER_SUBTASK, curr_frame, next_frame)
+        self.current_frame = next_frame
 
-    def backtrack(self):
-        ''' Pop frame off the stack and try the next method application.
-            Keep popping up stack until a method application is found.
+
+    def backtrack(self, trace_kind=None, trace=None):
+        ''' Pop frame off the stack and try the next method execution.
+            Keep popping up stack until a method execution is found.
             This is the normal movement of the cursor after failing to 
             apply an operator as part of a subtask sequence.
         '''
         while True:
-            if not self._pop_frame():
+            curr_frame = self.current_frame
+            if not (next_frame:=self._pop_frame()):
                 return False
 
+            if(trace):
+                trace.add(trace_kind, curr_frame, next_frame)
+
             # Try next possible MethodEx
+            curr_frame = self.current_frame
             next_frame = self.current_frame.next_method_exec()
             if(next_frame is not None):
+                if(trace):
+                    
+                    trace.add(TraceKind.SELECT_METHOD, curr_frame, next_frame)
+                    trace.add(TraceKind.ENTER_SUBTASK, curr_frame, next_frame)
                 break
+
+            # If no more MethodEx then pop up again
+            trace_kind = TraceKind.BACKTRACK_CHILD_CASCADE
 
         self.current_frame = next_frame
         return True
@@ -213,8 +243,8 @@ class Cursor:
         print("========== CURSOR STATE ==========")
 
         frame = self.current_frame
-        if(self.is_exhausted()):
-            print("-- Cursor is Exhausted -- ")
+        if(self.is_at_end()):
+            print("-- Cursor reached end of its root task -- ")
             return
 
         te = self.current_task_exec
@@ -481,17 +511,12 @@ class HtnPlanner2:
             self.logger.log_function()
         return self.trace.get_current_trace(include_states)
 
-# --------------------------
-# : Main Plan loop
+    # --------------------------
+    # : plan()
 
-    def plan(self, interactive: bool = False) -> List:
-        """
-        Execute the planning process.
-        :return: The complete plan.
-        """
+    def _plan_start(self):
         self.planning_start_time = time.time()
         if self.enable_logging:
-            self.logger.log_function()
             self.logger.info("Starting automated planning")
 
         if self.env and hasattr(self.env, 'get_state'):
@@ -500,55 +525,83 @@ class HtnPlanner2:
         if(self.root_task_queue.is_empty()):
             raise StopException("There are no tasks to plan for")
 
+    def _next_task_exec(self):
+        # If cursor is exhausted, pop off new root task, and make it into a TaskEx.
+        if(self.cursor.is_at_end()):
+            if(self.root_task_queue.is_empty()):
+                self.trace.add(TraceKind.ROOT_TASKS_EXHAUSTED)
+                return None
+
+            root_task = self.root_task_queue.get_next_task()
+            task_exec = root_task.as_task_exec(self.state)
+            self.trace.add(TraceKind.NEW_ROOT_TASK, task_exec)
+
+        # Otherwise use the TaskEx that the cursor is pointing to
+        else:
+            task_exec = self.cursor.current_subtask_exec
+
+        return task_exec
+
+    def _handle_task_exec(self, task_exec):
+        # Apply pattern matching to find child MethodExs or OperatorEx
+        #   of the current TaskEx.
+        child_execs = task_exec.get_child_executions(
+            self.domain_network, self.state
+        )
+
+        # Backtrack if matching fails for any reason.
+        if(child_execs is None or len(child_execs) == 0):
+            backtrack_kind = (
+                TraceKind.BACKTRACK_NO_CHILDREN,
+                TraceKind.BACKTRACK_NO_MATCH
+            )[child_execs is not None]
+
+            self.cursor.backtrack(backtrack_kind, trace=self.trace)
+
+        # Primitive Task Case: execute Operator
+        if(isinstance(child_execs[0], OperatorEx)):
+            operator_exec = child_execs[0]
+            success = self._apply_operator_execution(operator_exec)
+            if(success):
+                self.trace.add(TraceKind.APPLY_OPERATOR, operator_exec)
+                self.cursor.advance_subtask(trace=self.trace)
+            else:
+                self.cursor.backtrack(
+                    TraceKind.BACKTRACK_OPERATOR_FAIL,
+                    trace=self.trace
+                )
+        # Higher-Oder Task Case: Push a new frame with options for 
+        #    executing the task (will be handled in next loop).
+        else:
+            self.cursor.push_task_exec(task_exec, child_execs, trace=self.trace)
+
+
+    def plan(self, interactive: bool = False) -> List:
+        """
+        Execute the planning process.
+        :return: The complete plan.
+        """
+        self._plan_start()
+
+        # Main Plan Loop:
+        #  Each loop handles one TaskEx instance and makes one move of the Cursor.
+        #   (the Cursor holds the current plan state and stack).
+        #  Every Cursor movement is gaurenteed to either:
+        #   1. Enter a valid frame w/ a parent TaskEx, MethodEx, and current sub-TaskEx.
+        #   2. Exhaust the cursor (the current TaskEx will come from the root_task_queue)
         while True:
-            # If no frame pop off a new root task, and make a TaskEx for it
-            if(self.cursor.is_exhausted()):
-                if(self.root_task_queue.is_empty()):
-                    break
+            task_exec = self._next_task_exec()
 
-                root_task = self.root_task_queue.get_next_task()
-                task_exec = root_task.as_task_exec(self.state)
+            if(task_exec is None):
+                break
+            # Handle the current task execution
+            self._handle_task_exec(task_exec)
 
-            # Otherwise use the TaskEx that the cursor is pointing to
-            else:
-                task_exec = self.cursor.current_subtask_exec
+        return self.trace
+            
 
-            print(task_exec)
-            # -- Handle the task execution --
-
-            # Apply pattern matching to find child MethodExs or OperatorEx
-            #   of the current TaskExecution
-            child_execs = task_exec.get_child_executions(
-                self.domain_network, self.state
-            )
-
-            # Backtrack if matching fails completely for any reason
-            if(child_execs is None or len(child_execs) == 0):
-                self.cursor.backtrack(
-                    f"No Methods or Operator defined for Task {task_exec.task}."
-                )
-            elif(len(child_execs) == 0):
-                self.cursor.backtrack(
-                    f"No matches for Methods or Operator of TaskEx {task_exec}."
-                )
-
-            # Primitive Task Case: execute Operator
-            if(isinstance(child_execs[0], OperatorEx)):
-                success = self._apply_operator_execution(child_execs[0])
-
-                # print("Operator:", success, child_execs[0])
-                if(success):
-                    self.cursor.advance_subtask()
-                else:
-                    self.cursor.backtrack(
-                        f"Operator failed TaskEx:{task_exec}."
-                    )
-
-            # Higher-Oder Task Case: Push a new frame with options for 
-            #    executing the task (will be handled in next loop).
-            else:
-                self.cursor.push_task_exec(task_exec, child_execs)
-
+    # --------------------------
+    # : printing methods
 
     def print_current_plan(self):
         """Prints the current plan."""

@@ -220,7 +220,6 @@ class HtnPlanner:
         # Replace plan_list with trace
         self.trace = Trace()
 
-
         # Planning options
         self.validate = validate_input
         self.repeat_wait_time = repeat_wait_time

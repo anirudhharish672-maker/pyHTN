@@ -134,7 +134,8 @@ planner = HtnPlanner2(
     enable_logging=True
 )
 
-planner.plan()
+trace = planner.plan()
+trace.print_trace()
 
 
 # print(planner.get_next_method_execution())

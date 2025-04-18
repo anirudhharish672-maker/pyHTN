@@ -7,6 +7,13 @@ from pyhtn.conditions.pattern_matching import (
 )
 
 from py_plan.pattern_matching import build_index
+from enum import Enum
+
+class ExStatus(Enum):
+    INITIALIZED : "ExStatus" = 1
+    IN_PROGRESS : "ExStatus" = 2
+    SUCCESS :     "ExStatus" = 3
+    FAILED :      "ExStatus" = 4
 
 class ElementExecution(ABC):
     def __init__(self,
@@ -22,6 +29,7 @@ class ElementExecution(ABC):
         self.match = match
         self.parent_exec = parent_exec
         self.child_execs = child_execs
+        self.status = ExStatus.INITIALIZED
 
     def _base_longhash(self):
         return unique_hash([
@@ -46,7 +54,6 @@ class TaskEx(ElementExecution):
 
         super().__init__(task, state, match,
             parent_method_exec, child_method_execs)
-
 
     @property
     def id(self):
@@ -85,37 +92,6 @@ class TaskEx(ElementExecution):
             # match_substs = m_or_op.get_match_substitutions(self, state, index)
             child_execs += m_or_op.get_match_executions(self, state)
         return child_execs
-
-            # for m_subst in match_substs:
-            #     if(isinstance(m_or_op, Operator)):
-            #         child_execs.append(
-            #             OperatorEx(
-            #                 m_or_op, state,
-            #                 subst(m_subst, m_or_op.args),
-            #                 parent_task_exec=task_exec,
-            #             )
-            #         )
-
-            #     else:
-            #         meth_exec = MethodEx(
-            #             method, state
-            #             subst(m_subst, self.task.args),
-            #             parent_task_exec=self,
-            #         )
-            #         subtask_execs = []
-            #         for subtask in self.subtasks:
-            #             subtask_execs.append(
-            #                 TaskEx(
-            #                     subtask, state,
-            #                     subst(m_subst, subtask.args),
-            #                     parent_method_exec=meth_exec,
-            #                 )
-            #             )
-            #         meth_exec.child_execs = subtask_execs
-            #         meth_exec.subtask_execs = subtask_execs
-            #         child_execs.append(meth_exec)
-        # return child_execs
-
 
 class MethodEx(ElementExecution):
     def __init__(self,
