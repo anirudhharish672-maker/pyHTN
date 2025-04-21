@@ -1,6 +1,7 @@
 from pyhtn.common.imports.typing import *
 from abc import ABC, abstractmethod
 from pyhtn.htn.htn_elements import Task, Method, Operator, HTN_Element
+from pyhtn.common.utils import unique_hash
 
 from pyhtn.conditions.pattern_matching import (
     dict_to_tuple,
@@ -32,8 +33,12 @@ class ElementExecution(ABC):
         self.status = ExStatus.INITIALIZED
 
     def _base_longhash(self):
+        parent_id = None
+        if(self.parent_exec is not None):
+            self.parent_exec.id
+
         return unique_hash([
-            self.element.id, self.match, self.parent_exec.id
+            self.element.id, self.state, self.match, parent_id
         ])
 
     def _str_helper(self, kind):
@@ -42,6 +47,83 @@ class ElementExecution(ABC):
             return f"{kind}({self.element.name!r}, {match_str})"
         else:
             return f"{kind}({self.element.name!r})"
+
+    def as_dict(self):
+        elem = self.element
+        return {
+            "id" : self.id,
+            "name" : elem.name,
+            "match" : self.match,
+            "kind" : type(self).__name__,
+            "parent_id" : self.parent_exec.id if self.parent_exec else '',
+            "child_ids" : [ex.id for ex in self.child_execs],
+            "status" : self.status.name,
+            "htn_element" : elem.id
+        }
+
+    def tree_to_dict(self):#, cursor=None):
+        d = {}
+        frontier = [self]
+        while len(frontier) > 0:
+            new_frontier = []
+            for ex in frontier:
+                d[ex.id] = ex.as_dict()
+                new_frontier += ex.child_execs
+            frontier = new_frontier
+
+        # if(cursor):
+        #     frames = [*cursor.stack, cursor.current_frame]
+        #     for frame in frames:
+        #         te = frame.current_task_exec
+        #         me = frame.current_method_exec
+        #         if(te):
+        #             d[te.id]['on_plan_path'] = True
+        #         if(me):
+        #             d[me.id]['on_plan_path'] = True
+                
+        return d
+
+def _dict_obj_to_str(tree_dict, obj, options={}, recurse=True,  depth=0):
+    s = ""
+    if(obj['kind'] == "TaskEx"):
+        prim = obj.get('is_primitive', False)
+        s = f"{' '*depth}TE{'-P' if prim else '  '}: {obj['name']}({', '.join(obj['match'])})\n"
+        for child_id in obj['child_ids']:
+            child = tree_dict[child_id]
+            on_path = child['status'] in ("SUCCESS", "IN_PROGRESS")
+            visible = on_path or options.get("show_alt_methods", False)
+            if(visible):
+                s += _dict_obj_to_str(tree_dict, child, options, 
+                        recurse=on_path, depth=depth+1)
+
+    elif(obj['kind'] == "MethodEx"):
+        if(options.get("show_methods", False)):
+            s = f"{' '*depth}ME  : {obj['name']}({', '.join(obj['match'])})\n"
+        for child_id in obj['child_ids']:
+            child = tree_dict[child_id]
+            on_path = child['status'] in ("SUCCESS", "IN_PROGRESS")
+            s += _dict_obj_to_str(tree_dict, child, options, 
+                    recurse=on_path, depth=depth+1)        
+    elif(obj['kind'] == "OperatorEx"):
+        if(options.get("show_operators", False)):
+            s = f"{' '*depth}OE : {obj['name']}({', '.join(obj['match'])})\n"
+
+    return s
+
+def tree_dict_to_str(tree_dict, show_methods=True, 
+                                show_operators=False,
+                                show_alt_methods=False):
+    root_obj = None
+    for k, obj in tree_dict.items():
+        if(not obj['parent_id']):
+            root_obj = obj
+
+    options = {"show_methods" : show_methods,
+               "show_operators" : show_operators,
+               "show_alt_methods" : show_alt_methods}
+
+    return _dict_obj_to_str(tree_dict, root_obj,  options)
+
 
 class TaskEx(ElementExecution):
     def __init__(self,
@@ -83,7 +165,10 @@ class TaskEx(ElementExecution):
         # from pyhtn.htn.element_executions import MethodEx, TaskEx
         task = self.task
         # key = f"{task.name}/{len(task.args)}"
-        methods_or_op = domain[self.task.name]
+        methods_or_op = domain.get(self.task.name, None)
+        if(methods_or_op is None):
+            return None
+
         if(not isinstance(methods_or_op, list)):
             methods_or_op = [methods_or_op]
 
@@ -91,7 +176,15 @@ class TaskEx(ElementExecution):
         for m_or_op in methods_or_op:
             # match_substs = m_or_op.get_match_substitutions(self, state, index)
             child_execs += m_or_op.get_match_executions(self, state)
+
+        self.child_execs = child_execs
         return child_execs
+
+    def as_dict(self):
+        d = super().as_dict()
+        is_primitive = all([isinstance(ex, OperatorEx) for ex in self.child_execs])
+        d['is_primitive'] = is_primitive
+        return d
 
 class MethodEx(ElementExecution):
     def __init__(self,

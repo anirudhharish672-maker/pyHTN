@@ -7,7 +7,7 @@ from pyhtn.common.imports.typing import *
 
 class TraceKind(Enum):
     NEW_ROOT_TASK :           "TraceKind" = 1
-    ENTER_SUBTASK :           "TraceKind" = 2
+    FIRST_SUBTASK :           "TraceKind" = 2
     ADVANCE_SUBTASK :         "TraceKind" = 3
     USER_SELECT_SUBTASK :     "TraceKind" = 4
 
@@ -23,7 +23,9 @@ class TraceKind(Enum):
     BACKTRACK_OPERATOR_FAIL : "TraceKind" = 12   
     BACKTRACK_CHILD_CASCADE : "TraceKind" = 13
 
-    ROOT_TASKS_EXHAUSTED :    "TraceKind" = 14
+    ENTER_NOMATCH_FRAME :     "TraceKind" = 14
+
+    ROOT_TASKS_EXHAUSTED :    "TraceKind" = 15
 
 
 
@@ -81,10 +83,13 @@ class TraceEntry:
         return self._get_ex('subtask', 'prev')
         
     def get_description(self):
-        if(self.kind == TraceKind.NEW_ROOT_TASK):
+        if(self.kind in (
+            TraceKind.NEW_ROOT_TASK,
+            TraceKind.ENTER_NOMATCH_FRAME,
+            )):
             return f"{self.task_exec}"
         elif(self.kind in (
-                TraceKind.ENTER_SUBTASK,
+                TraceKind.FIRST_SUBTASK,
                 TraceKind.ADVANCE_SUBTASK,
                 TraceKind.USER_SELECT_SUBTASK,
             )):
@@ -152,6 +157,17 @@ class Trace:
             if entry.entry_type == "operator" and entry.success:
                 plan.append(entry.operator)
         return plan
+        
+
+    def get_prev_root_index(self):
+        for i in range(len(self.entries)-1, -1, -1):
+            if(self.entries[i].kind == TraceKind.NEW_ROOT_TASK):
+                return i
+
+    def get_prev_root(self):
+        entry = self.entries[self.get_prev_root_index()]
+        return entry.task_exec
+
 
     # def get_current_trace(self, include_states=False):
     #     """

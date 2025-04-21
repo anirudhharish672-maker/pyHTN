@@ -265,6 +265,7 @@ class Method(HTN_Element, MatchableMixin):
                 )
             meth_exec.child_execs = subtask_execs
             meth_execs.append(meth_exec)
+
         return meth_execs
 
 

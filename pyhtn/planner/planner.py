@@ -288,7 +288,6 @@ class HtnPlanner:
 
     def get_current_trace(self, include_states: bool = False):
         """
-
         :param include_states: Whether to include state information in the output
         :return:
         """
