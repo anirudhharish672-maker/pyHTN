@@ -577,7 +577,7 @@ class HtnPlanner2:
         # Backtrack or push a nomatch frame if matching fails for any reason.
         if(child_execs is None or len(child_execs) == 0):
             if(push_nomatch_frames):
-                print("NO MATCH FRAME")
+                print("NO MATCH FRAME", child_execs)
                 self.cursor.push_nomatch_frame(task_exec, child_execs, trace=self.trace)
                 return TraceKind.FIRST_SUBTASK
             else:
@@ -666,21 +666,31 @@ class HtnPlanner2:
         if self.enable_logging:
             self.logger.log_function()
         strings = []
-        tab = '\t'
+        tab = '  '
         header = "PLANNER NETWORK"
         border = '#' * (len(header) + 4)
         print(border)
         print('# ' + header + ' #')
         print(border + '\n')
 
-        for task_key, methods in self.domain_network.items():
-            task_name, num_args = task_key.split("/")
-            strings.append(0 * tab + f'Task({task_name}, num_args={num_args})')
+        for task_key, methods_or_op in self.domain_network.items():
+            strings.append(0 * tab + f'Task({task_key})')
+            if(not isinstance(methods_or_op, list)):
+                methods_or_op = [methods_or_op]
 
-            for method in methods:
-                strings.append(1 * tab + f'Method({method.name}, args={method.args})')
-                for subtask in method.subtasks:
-                    strings.append(2 * tab + f'{subtask.type.title()}({subtask.name}, args={subtask.args})')
+            for method_or_op in methods_or_op:
+                if(isinstance(method_or_op, Method)):
+                    method = method_or_op
+                    pos_args = [method.name, *method.args]
+                    strings.append(1 * tab + f"Method({', '.join([repr(x) for x in pos_args])}")
+
+                    for subtask in method.subtasks:
+                        strings.append(2 * tab + f'{subtask})')
+
+                elif(isinstance(method_or_op, Operator)):                
+                    strings.append(1 * tab + f'{method_or_op}')
+
+                
         for s in strings:
             print(s)
         print('\n')

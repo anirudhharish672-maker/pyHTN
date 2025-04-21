@@ -54,6 +54,9 @@ class MatchableMixin(ABC):
         ptstate = dict_to_tuple(state)
         index = build_index(ptstate)
         substitutions = unify(task_exec.match, self.args)
+
+        print("task_exec", task_exec)
+        print("substitutions", task_exec.match, self.args, substitutions)
         # print(task_exec.match, self.args)
 
         # Find the substitutions for each match
@@ -191,6 +194,9 @@ class Task(HTN_Element):
     def get_child_executions(self, domain, state):
         task_exec = self.as_task_exec(state)
         return task_exec.get_child_executions(domain, state)
+
+    def fn_str(self):
+        return f"{self.name}({', '.join([str(x) for x in self.args])})"
 
 # ------------------------------------------------------
 # : Method

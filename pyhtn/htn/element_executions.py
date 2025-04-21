@@ -83,11 +83,27 @@ class ElementExecution(ABC):
                 
         return d
 
+    def fn_str(self):
+        return f"{self.element.name}({', '.join([str(x) for x in self.match])})"
+
 def _dict_obj_to_str(tree_dict, obj, options={}, recurse=True,  depth=0):
+
+    cpre = ""
+    cpost = ""
+    if(options.get("show_colors", False)):
+        colors = {
+            "INITIALIZED": "\033[0m",  
+            "IN_PROGRESS": "\033[94m",  # Blue
+            "SUCCESS": "\033[92m",  # Green
+            "FAILED": "\033[91m"  # Red
+        }
+        cpre = colors[obj.get('status', "INITIALIZED")]
+        cpost = "\033[0m"
+
     s = ""
     if(obj['kind'] == "TaskEx"):
         prim = obj.get('is_primitive', False)
-        s = f"{' '*depth}TE{'-P' if prim else '  '}: {obj['name']}({', '.join(obj['match'])})\n"
+        s = f"{cpre}{' '*depth}TE{'-P' if prim else '  '}: {obj['name']}({', '.join(obj['match'])}){cpost}\n"
         for child_id in obj['child_ids']:
             child = tree_dict[child_id]
             on_path = child['status'] in ("SUCCESS", "IN_PROGRESS")
@@ -98,7 +114,7 @@ def _dict_obj_to_str(tree_dict, obj, options={}, recurse=True,  depth=0):
 
     elif(obj['kind'] == "MethodEx"):
         if(options.get("show_methods", False)):
-            s = f"{' '*depth}ME  : {obj['name']}({', '.join(obj['match'])})\n"
+            s = f"{cpre}{' '*depth}ME  : {obj['name']}({', '.join(obj['match'])}){cpost}\n"
         for child_id in obj['child_ids']:
             child = tree_dict[child_id]
             on_path = child['status'] in ("SUCCESS", "IN_PROGRESS")
@@ -106,11 +122,12 @@ def _dict_obj_to_str(tree_dict, obj, options={}, recurse=True,  depth=0):
                     recurse=on_path, depth=depth+1)        
     elif(obj['kind'] == "OperatorEx"):
         if(options.get("show_operators", False)):
-            s = f"{' '*depth}OE : {obj['name']}({', '.join(obj['match'])})\n"
+            s = f"{cpre}{' '*depth}OE : {obj['name']}({', '.join(obj['match'])}){cpost}\n"
 
     return s
 
-def tree_dict_to_str(tree_dict, show_methods=True, 
+def tree_dict_to_str(tree_dict, show_colors=True,
+                                show_methods=True, 
                                 show_operators=False,
                                 show_alt_methods=False):
     root_obj = None
@@ -118,11 +135,12 @@ def tree_dict_to_str(tree_dict, show_methods=True,
         if(not obj['parent_id']):
             root_obj = obj
 
-    options = {"show_methods" : show_methods,
+    options = {"show_colors" : show_colors,
+               "show_methods" : show_methods,
                "show_operators" : show_operators,
                "show_alt_methods" : show_alt_methods}
 
-    return _dict_obj_to_str(tree_dict, root_obj,  options)
+    return _dict_obj_to_str(tree_dict, root_obj,  options)[:-1]
 
 
 class TaskEx(ElementExecution):
@@ -182,7 +200,10 @@ class TaskEx(ElementExecution):
 
     def as_dict(self):
         d = super().as_dict()
-        is_primitive = all([isinstance(ex, OperatorEx) for ex in self.child_execs])
+        is_primitive = (
+            len(self.child_execs) > 0 and
+            all([isinstance(ex, OperatorEx) for ex in self.child_execs])
+        )
         d['is_primitive'] = is_primitive
         return d
 

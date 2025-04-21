@@ -14,52 +14,65 @@ from pprint import pprint
 domain = {
     #  ----  OPERATORS -------    
 
-    "get" : Operator('get', 
-        args=[V("item")], 
-        # preconditions=[NOT(Fact(person='me', holding=V("anything")))],
-        effects=[Fact(id='me', holding=V("item"))]
-    ),
+    "get" : [
+        Operator('get', 
+            args=[V("item")], 
+            # preconditions=[NOT(Fact(person='me', holding=V("anything")))],
+            effects=[Fact(id='me', holding=V("item"))]
+        ),
+    ],
 
-    'add_instant_coffee' : Operator('add_instant_coffee', 
-        args=[V("container")], 
-        # preconditions=[NOT(Fact(container=V("container"), "contents", V("anything")
-        effects=[Fact(container=V("container"), solid_contents='instant_coffee')]
-    ),
+    'add_instant_coffee' : [
+        Operator('add_instant_coffee', 
+            args=[V("container")], 
+            # preconditions=[NOT(Fact(container=V("container"), "contents", V("anything")
+            effects=[Fact(container=V("container"), solid_contents='instant_coffee')]
+        ),
+    ],
 
-    'add' : Operator('add', 
-        args=[V("container"), V('solid')], 
-        # preconditions=[NOT(Fact(V("container"), "contents", V("anything")))],
-        effects=[Fact(container=V("container"), solid_contents=V('solid'))]
-    ),
+    'add' : [
+        Operator('add', 
+            args=[V("container"), V('solid')], 
+            # preconditions=[NOT(Fact(V("container"), "contents", V("anything")))],
+            effects=[Fact(container=V("container"), solid_contents=V('solid'))]
+        ),
+    ],
 
-    'pour' : Operator('pour', 
-        args=[V("container1"), V("container2")], 
-        # preconditions=[NOT(Fact(V("container"), "contents", V("anything")))],
-        effects=[
-            Fact(container=V("container"), liquid_contents=V('liquid'))
-        ]
-    ),
+    'pour' : [
+        Operator('pour', 
+            args=[V("container1"), V("container2")], 
+            # preconditions=[NOT(Fact(V("container"), "contents", V("anything")))],
+            effects=[
+                Fact(container=V("container"), liquid_contents=V('liquid'))
+            ]
+        ),
+    ],
 
-    'fill' : Operator('fill', 
-        args=[V("container"), V('liquid')],
-        effects=[
-            Fact(container=V("container"), liquid_contents=V('liquid'))
-        ]
-    ),
+    'fill' : [
+        Operator('fill', 
+            args=[V("container"), V('liquid')],
+            effects=[
+                Fact(container=V("container"), liquid_contents=V('liquid'))
+            ]
+        ),
+    ],
 
-    'turn_on' : Operator('turn_on', 
-        args=[V("container")],
-        effects=[
-            Fact(container=V("container"), is_on=True)
-        ]
-    ),
+    'turn_on' : [
+        Operator('turn_on', 
+            args=[V("container")],
+            effects=[
+                Fact(container=V("container"), is_on=True)
+            ]
+        ),
+    ],
 
-    'wait_for_boil' : Operator('wait_for_boil', 
-        args=[V("container")],
-        effects=[
-            Fact(container=V("container"), is_on=True)
-        ]
-    ),
+    'wait_for_boil' : [
+        Operator('wait_for_boil', 
+            args=[V("container")],
+            effects=[
+                Fact(container=V("container"), is_on=True)
+        ]),
+    ],
 
     #  ----  METHODS -------
 
@@ -231,8 +244,9 @@ def test_tree_to_dict():
     return planner
 
 
-
 planner = test_tree_to_dict()
+planner.print_network()
+
 # root = planner.get_current_root()
 # print("ROOT", )
 
