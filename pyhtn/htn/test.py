@@ -246,6 +246,7 @@ def test_tree_to_dict():
 
 planner = test_tree_to_dict()
 planner.print_network()
+print(planner.is_exhausted())
 
 # root = planner.get_current_root()
 # print("ROOT", )

@@ -532,6 +532,9 @@ class HtnPlanner2:
     #         self.logger.log_function()
     #     return self.trace.get_current_trace(include_states)
 
+    def is_exhausted(self):
+        return self.root_task_queue.is_empty() and self.cursor.is_at_end()
+
     # --------------------------
     # : plan()
 
@@ -543,7 +546,7 @@ class HtnPlanner2:
         if self.env and hasattr(self.env, 'get_state'):
             self.state = self.env.get_state()
 
-        if(self.root_task_queue.is_empty() and self.cursor.is_at_end()):
+        if(self.is_exhausted()):
             raise StopException("There are no tasks to plan for")
 
     def _next_task_exec(self):
