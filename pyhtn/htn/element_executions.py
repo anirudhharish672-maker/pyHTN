@@ -53,10 +53,17 @@ class ElementExecution(ABC):
         return {
             "id" : self.id,
             "name" : elem.name,
-            "match" : self.match,
+            "match": ' '.join(str(m).replace('_', ' ') for m in self.match),
             "kind" : type(self).__name__,
             "parent_id" : self.parent_exec.id if self.parent_exec else '',
-            "child_ids" : [ex.id for ex in self.child_execs],
+            "child_ids" : [
+                {
+                    "task": ' '.join([ex.element.name] + [str(m).replace('_', ' ') for m in ex.match]),
+                    "id": ex.id
+                }
+                for ex in self.child_execs
+            ],
+
             "status" : self.status.name,
             "htn_element" : elem.id
         }
