@@ -732,8 +732,10 @@ class HtnPlanner2:
     #     self.domain_network[task_id].append(new_method)
     #     return new_method
 
-    def add_method(self, method: Method):
-        task_id = f"{method.name}/{len(method.args)}"
+    def add_method(self, method: Method):   
+        task_id = str(method.name)
+        if task_id not in self.domain_network:
+            self.domain_network[task_id] = []
         self.domain_network[task_id].append(method)
 
 
