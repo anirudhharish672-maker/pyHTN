@@ -1,4 +1,4 @@
-from pyhtn.htn.htn_elements import Method, Operator, Task
+from pyhtn.htn import Method, Operator, Task, MethodEx, OperatorEx, TaskEx
 from pyhtn.htn.element_executions import tree_dict_to_str
 from pyhtn.htn.planner2 import HtnPlanner2
 from pyhtn.conditions.fact import Fact
@@ -213,9 +213,26 @@ def test_nomatch_frame():
     trace.print_trace()
     return planner
 
+def test_add_method_exec():
+    planner = setup()
 
+    trace = planner.plan_to_next_decomposition()
 
+    conjure_coffee = Task('conjure', 'coffee')
+    method = Method('make_coffee', subtasks=[conjure_coffee])
 
+    task_exec = planner.cursor.current_task_exec 
+    
+    method_exec = MethodEx(method, [], (), task_exec)
+    subtask_exec = TaskEx(conjure_coffee, [], ('coffee',), method_exec)
+    method_exec.child_execs = [subtask_exec]
+
+    planner.add_method_exec(method_exec)
+    planner.stage_method_exec(method_exec)
+
+    trace = planner.plan_to_next_decomposition(push_nomatch_frame=True)
+    trace.print_trace()
+    return planner
 
 
 def test_tree_to_dict():
@@ -243,10 +260,11 @@ def test_tree_to_dict():
 
     return planner
 
+test_add_method_exec()
 
-planner = test_tree_to_dict()
-planner.print_network()
-print(planner.is_exhausted())
+# planner = test_tree_to_dict()
+# planner.print_network()
+# print(planner.is_exhausted())
 
 # root = planner.get_current_root()
 # print("ROOT", )

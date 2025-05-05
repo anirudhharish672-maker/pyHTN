@@ -13,8 +13,9 @@ class TraceKind(Enum):
 
     SELECT_METHOD :           "TraceKind" = 5
     USER_SELECT_METHOD :      "TraceKind" = 6
+    USER_ADD_METHOD :         "TraceKind" = 7
 
-    APPLY_OPERATOR :          "TraceKind" = 7
+    APPLY_OPERATOR :          "TraceKind" = 8
 
     POP_FRAME :               "TraceKind" = 9
 
@@ -44,6 +45,8 @@ class TraceEntry:
             self._task_exec = arg0
         elif(isinstance(arg0, OperatorEx)):
             self._operator_exec = arg0
+        elif(isinstance(arg0, MethodEx)):
+            self._method_exec = arg0
 
         if(isinstance(arg1, FrameContext)):
             self.next_frame = arg1
@@ -97,7 +100,8 @@ class TraceEntry:
         
         elif(self.kind in (
                 TraceKind.SELECT_METHOD,
-                TraceKind.USER_SELECT_METHOD
+                TraceKind.USER_SELECT_METHOD,
+                TraceKind.USER_ADD_METHOD
             )):
             return f"{self.method_exec}"
         elif(self.kind in (

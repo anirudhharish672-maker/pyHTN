@@ -296,6 +296,10 @@ class HtnPlanner:
             self.logger.log_function()
         return self.trace.get_current_trace(include_states)
 
+    def log(self, message):
+        if self.enable_logging:
+            self.logger.info(message)
+
     def plan(self, interactive: bool = False) -> List:
         """
         Execute the planning process.

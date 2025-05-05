@@ -293,6 +293,26 @@ class Cursor:
 
         self.current_frame = next_frame
 
+    def add_method_exec(self, method_exec, task_exec=None, trace=None):
+        # Resolve the frame associated with task_exec
+        task_frame = None
+        if(task_exec is None):
+            task_frame = self.current_frame
+        else:
+            for frame in [self.current_frame, self.stack]:
+                if(task_exec is frame.current_task_exec):
+                    task_frame = frame
+                    break
+
+        if(task_frame is None):
+            raise ValueError(f"No frame in plan stack associated with {task_exec}.")
+
+        # Add the method_exec to the possibilities in the frame
+        task_frame.possible_method_execs.append(method_exec)
+        if(trace):
+            trace.add(TraceKind.USER_ADD_METHOD, method_exec, task_frame)
+
+
     def print(self):
         """
         Print the current state of the cursor in a readable format.
@@ -591,7 +611,7 @@ class HtnPlanner2:
                 )[child_execs is not None]
 
                 self.cursor.backtrack(backtrack_kind, trace=self.trace)
-            return backtrack_kind
+                return backtrack_kind
 
         # Primitive Task Case: execute Operator
         if(isinstance(child_execs[0], OperatorEx)):
@@ -827,7 +847,8 @@ class HtnPlanner2:
         print("INDEX", index)
         self.cursor.user_select_method_exec(index, self.trace)
     
-
+    def add_method_exec(self, method_exec, task_exec=None):
+        self.cursor.add_method_exec(method_exec, task_exec, self.trace)
 
         # if self.enable_logging:
         #     self.logger.log_function()
