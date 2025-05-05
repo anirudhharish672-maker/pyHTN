@@ -260,6 +260,7 @@ def test_tree_to_dict():
 
     return planner
 
+test_backtrack_no_children()
 test_add_method_exec()
 
 # planner = test_tree_to_dict()

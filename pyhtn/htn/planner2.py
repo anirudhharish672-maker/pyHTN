@@ -20,7 +20,7 @@ from pyhtn.planner.planner_logger import PlannerLogger
 from pyhtn.planner.trace import Trace, TraceKind
 
 
-@dataclass(eq=True, frozen=True)
+@dataclass(eq=True, frozen=False)
 class FrameContext:
     """
     Keeps track of the current position within an attempt
@@ -114,13 +114,25 @@ class FrameContext:
     def current_method_exec(self):
         method_execs = self.possible_method_execs
         meth_ind = self.method_exec_index
-        return method_execs[meth_ind]
+        if(method_execs and meth_ind is not None 
+            and len(method_execs) > 0):
+
+            return method_execs[meth_ind]
+        else:
+            return None
 
     @property
     def current_subtask_exec(self):
+        if(not self.current_method_exec):
+            return None
         subtask_execs = self.current_method_exec.subtask_execs
         ind = self.subtask_exec_index
-        return subtask_execs[ind]
+        if(subtask_execs and ind is not None
+           and len(subtask_execs) > 0):
+            return subtask_execs[ind]
+        else:
+            return None
+
 
     @property
     def is_nomatch(self):
@@ -231,13 +243,12 @@ class Cursor:
                 trace.add(trace_kind, curr_frame, next_frame)
 
             if not next_frame:
-                print("NO POP")
                 return False
 
             
             # Try next possible MethodEx
             curr_frame = self.current_frame
-            next_frame = self.current_frame.next_method_exec()
+            next_frame = self.current_frame.next_method_frame()
             if(next_frame is not None):
                 if(trace):
                     trace.add(TraceKind.SELECT_METHOD,       curr_frame, next_frame)
@@ -254,7 +265,8 @@ class Cursor:
         # Make a new frame pointing at the selected MethodEx
         curr_frame = self.current_frame
 
-        curr_frame.current_method_exec.status = ExStatus.INITIALIZED
+        if(curr_frame.current_method_exec):
+            curr_frame.current_method_exec.status = ExStatus.INITIALIZED
 
         next_frame = FrameContext.new_frame(
             curr_frame.task_exec,
@@ -268,7 +280,6 @@ class Cursor:
             trace.add(TraceKind.FIRST_SUBTASK, curr_frame, next_frame)
 
         self.current_frame = next_frame
-
 
     def push_nomatch_frame(self, task_exec, method_execs, trace=None):
         ''' Recurse into an nomatch frame this is a kind of 
@@ -308,7 +319,10 @@ class Cursor:
             raise ValueError(f"No frame in plan stack associated with {task_exec}.")
 
         # Add the method_exec to the possibilities in the frame
+        if(task_frame.possible_method_execs is None):
+            task_frame.possible_method_execs = []
         task_frame.possible_method_execs.append(method_exec)
+
         if(trace):
             trace.add(TraceKind.USER_ADD_METHOD, method_exec, task_frame)
 
@@ -593,6 +607,7 @@ class HtnPlanner2:
 
         # Apply pattern matching to find child MethodExs or OperatorEx
         #   of the current TaskEx.
+        print("get_child_executions", task_exec)
         child_execs = task_exec.get_child_executions(
             self.domain_network, self.state
         )
@@ -843,9 +858,13 @@ class HtnPlanner2:
 
     def stage_method_exec(self, method_exec):
         task_exec, method_execs = self.get_next_method_execs()
-        index = [i for i, x in enumerate(method_execs) if x == method_exec][0]
-        print("INDEX", index)
-        self.cursor.user_select_method_exec(index, self.trace)
+        inds = [i for i, x in enumerate(method_execs) if x == method_exec]
+
+        if(len(inds) == 0):
+            raise ValueError(f"MethodEx stage {method_exec} fail." +
+                "Not a possible MethodEx for this state")
+
+        self.cursor.user_select_method_exec(inds[0], self.trace)
     
     def add_method_exec(self, method_exec, task_exec=None):
         self.cursor.add_method_exec(method_exec, task_exec, self.trace)

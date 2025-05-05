@@ -92,14 +92,11 @@ class Operator(HTN_Element, MatchableMixin):
                  preconditions=None,
                  cost=1.0) -> None:
 
-        if(len(args) == 0):
+        if(len(args) == 0 and _args):
             args = _args
 
         super().__init__(name, args, cost)
         self.id = f"O_{rand_uid()}"
-
-        if(len(args) == 0):
-            args = _args
 
         self.effects = effects
         self.preconditions = preconditions
@@ -166,7 +163,7 @@ class Task(HTN_Element):
                  priority='first',
                  repeat=1):
 
-        if(len(args) == 0):
+        if(len(args) == 0 and _args):
             args = _args
 
         super().__init__(name, args, cost)
@@ -210,7 +207,7 @@ class Method(HTN_Element, MatchableMixin):
                  preconditions=None,
                  cost=1.0) -> None:
 
-        if(len(args) == 0):
+        if(len(args) == 0 and _args):
             args = _args
 
         super().__init__(name, args, cost)
