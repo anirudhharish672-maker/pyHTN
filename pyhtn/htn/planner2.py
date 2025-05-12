@@ -187,7 +187,8 @@ class Cursor:
         while True:
             # Advance to next subtask exececution in current MethodEx
             curr_frame = self.current_frame
-            curr_frame.current_subtask_exec.status = ExStatus.SUCCESS
+            if(curr_frame.current_subtask_exec):
+                curr_frame.current_subtask_exec.status = ExStatus.SUCCESS
             next_frame = self.current_frame.next_subtask_frame()
             if(next_frame is not None):
                 if(trace):
@@ -196,7 +197,8 @@ class Cursor:
             
             # If subtask sequence exhasted try popping frame from stack
             curr_frame.current_task_exec.status = ExStatus.SUCCESS
-            curr_frame.current_method_exec.status = ExStatus.SUCCESS
+            if(curr_frame.current_method_exec):
+                curr_frame.current_method_exec.status = ExStatus.SUCCESS
             next_frame = self._pop_frame()
             if(next_frame is None):
                 break
@@ -232,12 +234,16 @@ class Cursor:
             This is the normal movement of the cursor after failing to 
             apply an operator as part of a subtask sequence.
         '''
+        next_frame = None
         while True:
             curr_frame = self.current_frame
-            curr_frame.current_task_exec.status = ExStatus.FAILED
-            curr_frame.current_method_exec.status = ExStatus.FAILED
-            curr_frame.current_subtask_exec.status = ExStatus.FAILED
-            next_frame = self._pop_frame()
+            if(curr_frame is not None):
+                curr_frame.current_task_exec.status = ExStatus.FAILED
+                if(curr_frame.current_method_exec):
+                    curr_frame.current_method_exec.status = ExStatus.FAILED
+                if(curr_frame.current_subtask_exec):
+                    curr_frame.current_subtask_exec.status = ExStatus.FAILED
+                next_frame = self._pop_frame()
 
             if(trace):
                 trace.add(trace_kind, curr_frame, next_frame)
@@ -258,7 +264,7 @@ class Cursor:
             # If no more MethodEx then pop up again
             trace_kind = TraceKind.BACKTRACK_CHILD_CASCADE
 
-        self.current_frame = next_frame
+            self.current_frame = next_frame
         return True
 
     def user_select_method_exec(self, method_ind=0, trace=None):
@@ -634,13 +640,15 @@ class HtnPlanner2:
             success = self._apply_operator_execution(operator_exec)
             if(success):
                 self.trace.add(TraceKind.APPLY_OPERATOR, operator_exec)
-                self.cursor.advance_subtask(trace=self.trace)
+                if(self.cursor.current_frame):
+                    self.cursor.advance_subtask(trace=self.trace)
                 return TraceKind.ADVANCE_SUBTASK
             else:
                 self.cursor.backtrack(
                     TraceKind.BACKTRACK_OPERATOR_FAIL,
                     trace=self.trace
                 )
+
                 return TraceKind.BACKTRACK_OPERATOR_FAIL
         # Higher-Oder Task Case: Push a new frame with options for 
         #    executing the task (will be handled in next loop).
@@ -985,6 +993,9 @@ class HtnPlanner2:
                     operator_exec.match
                 )
             except Exception as e:
+                print(">> Exception")
+                print(e)
+                raise e
                 success = False
         else:
             if self.enable_logging:
