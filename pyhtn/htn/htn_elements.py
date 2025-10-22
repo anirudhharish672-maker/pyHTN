@@ -55,8 +55,8 @@ class MatchableMixin(ABC):
         index = build_index(ptstate)
         substitutions = unify(task_exec.match, self.args)
 
-        print("task_exec", task_exec)
-        print("substitutions", task_exec.match, self.args, substitutions)
+        # print("task_exec", task_exec)
+        # print("substitutions", task_exec.match, self.args, substitutions)
         # print(task_exec.match, self.args)
 
         # Find the substitutions for each match

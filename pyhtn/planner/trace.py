@@ -161,8 +161,11 @@ class Trace:
             if entry.entry_type == "operator" and entry.success:
                 plan.append(entry.operator)
         return plan
-        
 
+
+    def get_prev_entry(self):
+        return self.entries[-1]
+        
     def get_prev_root_index(self):
         for i in range(len(self.entries)-1, -1, -1):
             if(self.entries[i].kind == TraceKind.NEW_ROOT_TASK):
@@ -171,6 +174,16 @@ class Trace:
     def get_prev_root(self):
         entry = self.entries[self.get_prev_root_index()]
         return entry.task_exec
+
+    def get_prev_operator_index(self):
+        for i in range(len(self.entries)-1, -1, -1):
+            if(self.entries[i].kind == TraceKind.APPLY_OPERATOR):
+                return i
+
+    def get_prev_operator(self):
+        entry = self.entries[self.get_prev_operator_index()]
+        return entry.operator_exec
+
 
 
     # def get_current_trace(self, include_states=False):

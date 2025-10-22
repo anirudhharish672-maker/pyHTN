@@ -613,7 +613,7 @@ class HtnPlanner2:
 
         # Apply pattern matching to find child MethodExs or OperatorEx
         #   of the current TaskEx.
-        print("get_child_executions", task_exec)
+        # print("get_child_executions", task_exec)
         child_execs = task_exec.get_child_executions(
             self.domain_network, self.state
         )
@@ -863,6 +863,14 @@ class HtnPlanner2:
         frame = self.cursor.current_frame
         method_execs = frame.possible_method_execs
         return frame.task_exec, method_execs
+
+
+    def plan_to_next_operator(self, push_nomatch_frame=True):
+        return self.plan(stop_kinds=[TraceKind.ADVANCE_SUBTASK], push_nomatch_frame=push_nomatch_frame)
+
+    def get_prev_operator_exec(self):
+        op_exec = self.trace.get_prev_operator()
+        return op_exec 
 
     def stage_method_exec(self, method_exec):
         task_exec, method_execs = self.get_next_method_execs()

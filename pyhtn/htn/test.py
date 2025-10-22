@@ -260,8 +260,30 @@ def test_tree_to_dict():
 
     return planner
 
-test_backtrack_no_children()
-test_add_method_exec()
+
+def test_plan_to_operator():
+    planner = setup()
+
+    while not planner.is_exhausted():
+        trace = planner.plan_to_next_operator()
+        print(">>", planner.get_prev_operator_exec())
+
+    trace.print_trace()
+
+
+
+    # _, method_execs = planner.get_next_method_execs()
+
+    # planner.stage_method_exec(method_execs[1])
+    
+    # trace = planner.plan_to_next_decomposition()
+    # trace.print_trace()
+    return planner
+
+
+# test_backtrack_no_children()
+# test_add_method_exec()
+test_plan_to_operator()
 
 # planner = test_tree_to_dict()
 # planner.print_network()
