@@ -158,8 +158,8 @@ class Trace:
         """
         plan = []
         for entry in self.entries:
-            if entry.entry_type == "operator" and entry.success:
-                plan.append(entry.operator)
+            if entry.entry_type == "operator": #and getattr(entry, "success", False):
+                plan.append(entry.operator_exec)
         return plan
 
 
@@ -220,8 +220,8 @@ class Trace:
             print("No actions in plan yet.")
             return
 
-        for i, operator in enumerate(plan):
-            print(f"Step {i + 1:02d}: {operator.name}({', '.join(str(arg) for arg in operator.args)})")
+        for i, op_ex in enumerate(plan):
+            print(f"Step {i + 1:02d}: {op_ex}")
 
         print(f"\nTotal actions: {len(plan)}")
         print("────────────────────────────────────────────────────")
