@@ -281,6 +281,17 @@ def test_plan_to_operator():
     return planner
 
 
+
+if __name__ == "__main__":
+    env = env = MagicMock()
+    env.get_state.return_value = [{'id': '1', 'type': 'location', 'name': 'kitchen'}]
+    planner = HtnPlanner2(
+        tasks = [{'name': 'make_coffee', 'args': []}],
+        domain = domain,
+        env = env,
+        enable_logging=True
+    )
+
 # test_backtrack_no_children()
 # test_add_method_exec()
 test_plan_to_operator()

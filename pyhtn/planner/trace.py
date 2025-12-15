@@ -8,25 +8,27 @@ from pyhtn.common.imports.typing import *
 class TraceKind(Enum):
     NEW_ROOT_TASK :           "TraceKind" = 1
     FIRST_SUBTASK :           "TraceKind" = 2
-    ADVANCE_SUBTASK :         "TraceKind" = 3
-    USER_SELECT_SUBTASK :     "TraceKind" = 4
+    EXPAND_TO_OPERATOR :      "TraceKind" = 3
+    EXPAND_TO_METHOD :        "TraceKind" = 4
+    ADVANCE_SUBTASK :         "TraceKind" = 5
+    USER_SELECT_SUBTASK :     "TraceKind" = 6
 
-    SELECT_METHOD :           "TraceKind" = 5
-    USER_SELECT_METHOD :      "TraceKind" = 6
-    USER_ADD_METHOD :         "TraceKind" = 7
+    SELECT_METHOD :           "TraceKind" = 7
+    USER_SELECT_METHOD :      "TraceKind" = 8
+    USER_ADD_METHOD :         "TraceKind" = 9
 
-    APPLY_OPERATOR :          "TraceKind" = 8
+    APPLY_OPERATOR :          "TraceKind" = 10
 
-    POP_FRAME :               "TraceKind" = 9
+    POP_FRAME :               "TraceKind" = 11
 
-    BACKTRACK_NO_CHILDREN :   "TraceKind" = 10
-    BACKTRACK_NO_MATCH :      "TraceKind" = 11  
-    BACKTRACK_OPERATOR_FAIL : "TraceKind" = 12   
-    BACKTRACK_CHILD_CASCADE : "TraceKind" = 13
+    BACKTRACK_NO_CHILDREN :   "TraceKind" = 12
+    BACKTRACK_NO_MATCH :      "TraceKind" = 13  
+    BACKTRACK_OPERATOR_FAIL : "TraceKind" = 14   
+    BACKTRACK_CHILD_CASCADE : "TraceKind" = 15
 
-    ENTER_NOMATCH_FRAME :     "TraceKind" = 14
+    ENTER_NOMATCH_FRAME :     "TraceKind" = 16
 
-    ROOT_TASKS_EXHAUSTED :    "TraceKind" = 15
+    ROOT_TASKS_EXHAUSTED :    "TraceKind" = 17
 
 
 
@@ -93,6 +95,8 @@ class TraceEntry:
             return f"{self.task_exec}"
         elif(self.kind in (
                 TraceKind.FIRST_SUBTASK,
+                TraceKind.EXPAND_TO_OPERATOR,
+                TraceKind.EXPAND_TO_METHOD,
                 TraceKind.ADVANCE_SUBTASK,
                 TraceKind.USER_SELECT_SUBTASK,
             )):

@@ -29,49 +29,110 @@ class FrameContext:
 
     # The task execution being handled by this frame
     task_exec : TaskEx
-    # Possible method executions for current task execution.
-    #  If one fails we can backtrack and try another
-    possible_method_execs : List[MethodEx]
-    # Index of current MethodEx
-    method_exec_index : int
 
-    # MethodEx inidices already visited. Keep this list in case 
+    # Child method or operator executions for current task execution.
+    #  If one fails we can backtrack and try another
+    child_execs : List[MethodEx]
+
+    # Index of current MethodEx
+    child_exec_index : int
+
+    # MethodEx indices already visited. Keep this list in case 
     #  for some reason we don't go through them in order
-    visted_method_exec_indices : List[int]
+    visited_child_exec_inds : List[int]
 
     # Within the current MethodEx the index of the active subtask_exec
     subtask_exec_index : int
-    # MethodEx inidices already visited. Keep this list in case 
+
+    # The span of subtasks that this frame effectively covers 
+    #   because they are part of an unordered group or are skippable
+    eff_span : tuple[int,int] 
+
+    # MethodEx indices already visited. Keep this list in case 
     #  for some reason we don't go through them in order
     visted_subtask_exec_indices : List[int]
 
-    def _next_method_exec_index(self):
+    is_operator_frame : bool
+    is_span_overflow : bool
+
+    def __init__(self, task_exec, child_execs,
+                child_exec_index, visited_child_exec_inds,
+                subtask_exec_index, visted_subtask_exec_indices=[], eff_span=None):
+        self.task_exec = task_exec
+        self.child_execs = child_execs
+        self.child_exec_index = child_exec_index
+        self.visited_child_exec_inds = visited_child_exec_inds
+        self.subtask_exec_index = subtask_exec_index
+        self.visted_subtask_exec_indices = visted_subtask_exec_indices
+
+        child = child_execs[child_exec_index] if child_exec_index < len(child_execs) else None
+        self.is_operator_frame = isinstance(child, OperatorEx)
+
+        if(eff_span is None and not self.is_operator_frame):
+            self.eff_span = self._index_eff_span(child_exec_index)
+        else:
+            self.eff_span = eff_span
+
+        self.is_span_overflow = (not self.is_operator_frame and 
+                                 self.eff_span[1] >= len(child.subtask_execs))
+
+    def _next_child_exec_index(self):
         # TODO : Might consider policies other than trying MethodExs sequentially  
-        nxt = self.method_exec_index + 1 
-        if(nxt >= len(self.possible_method_execs)):
+        nxt = self.child_exec_index + 1 
+        if(nxt >= len(self.child_execs)):
             return None
         return nxt
 
+    def _index_eff_span(self, ind):
+        ''' 
+        For a particular subtask index, returns the effective span
+        of other subtasks that are reachable within the same
+        unordered group, or because subsequent subtasks are optional
+        '''
+        method_exec = self.current_method_exec
+        method = method_exec.method
+        spans = method.unord_spans
+        start, end = ind, ind+(len(method.subtasks) > 0)
+        # print()
+        # print(ind, "SPANS", spans)
+        for (s,e) in spans:
+            if(s < end and e >= start):
+                if(s < start): start = s
+                if(e > end): end = e
+            while(end < len(method.subtasks) and 
+                  method.subtasks[end-1].optional == True):
+                end += 1
+        # print(start, end, len(method.subtasks))
+        sbtsks = [method.subtasks[i] for i in range(start, end)]
+        prnt = lambda x : x.name + ("*" if x.optional else "")
+        # print(start, end, ", ".join([prnt(x) for x in sbtsks]))
+        return start, end
+
     def _next_subtask_exec_index(self):
-        # TODO : Might consider policies other than trying MethodExs sequentially  
+
+        # self._resolve_index_eff_span(self.subtask_exec_index)
+
+        # TODO : Might consider policies other than trying TaskExs sequentially  
         nxt = self.subtask_exec_index + 1 
         subtask_execs = self.current_method_exec.subtask_execs
         if(nxt >= len(subtask_execs)):
             return None
+
+        # self._index_eff_span(nxt)
         return nxt
 
-    def next_method_frame(self):
-        ind = self._next_method_exec_index()
+    def next_child_frame(self):
+        ind = self._next_child_exec_index()
 
         if(ind is None):
             return None
 
         return FrameContext(
             task_exec =                 self.task_exec,
-            possible_method_execs =     self.possible_method_execs,
-            method_exec_index =         ind, 
-            visted_method_exec_indices = (
-                self.visted_method_exec_indices + [self.method_exec_index],
+            child_execs =     self.child_execs,
+            child_exec_index =         ind, 
+            visited_child_exec_inds = (
+                self.visited_child_exec_inds + [self.child_exec_index],
             ),
             subtask_exec_index =         0,
             visted_subtask_exec_indices = [],
@@ -84,9 +145,9 @@ class FrameContext:
 
         return FrameContext(
             task_exec =                  self.task_exec,
-            possible_method_execs =      self.possible_method_execs,
-            method_exec_index =          self.method_exec_index, 
-            visted_method_exec_indices = self.visted_method_exec_indices,
+            child_execs =               self.child_execs,
+            child_exec_index =          self.child_exec_index, 
+            visited_child_exec_inds = self.visited_child_exec_inds,
             subtask_exec_index =         ind,
             visted_subtask_exec_indices = (
                 self.visted_subtask_exec_indices + [self.subtask_exec_index]
@@ -94,16 +155,17 @@ class FrameContext:
         )
 
     @classmethod
-    def new_frame(self, task_exec, method_execs, 
-                    method_index=0,
+    def new_frame(self, task_exec, child_execs, 
+                    child_index=0,
                     subtask_index=0):
+
         return FrameContext(
             task_exec =                  task_exec,
-            possible_method_execs =      method_execs,
-            method_exec_index =          method_index, 
-            visted_method_exec_indices = [],
+            child_execs =               child_execs,
+            child_exec_index =          child_index, 
+            visited_child_exec_inds = [],
             subtask_exec_index =         subtask_index,
-            visted_subtask_exec_indices = []
+            visted_subtask_exec_indices = [],
         )
 
     @property
@@ -111,19 +173,31 @@ class FrameContext:
         return self.task_exec
 
     @property
-    def current_method_exec(self):
-        method_execs = self.possible_method_execs
-        meth_ind = self.method_exec_index
-        if(method_execs and meth_ind is not None 
-            and len(method_execs) > 0):
+    def current_child_exec(self):
+        child_execs = self.child_execs
+        child_ind = self.child_exec_index
+        if(child_execs and child_ind is not None 
+            and len(child_execs) > 0):
 
-            return method_execs[meth_ind]
+            return child_execs[child_ind]
         else:
             return None
 
     @property
+    def current_method_exec(self):
+        child = self.current_child_exec
+        assert(isinstance(child, MethodEx))
+        return child
+
+    @property
+    def current_operator_exec(self):
+        child = self.current_child_exec
+        assert(isinstance(child, OperatorEx))
+        return child
+
+    @property
     def current_subtask_exec(self):
-        if(not self.current_method_exec):
+        if(self.is_operator_frame or not self.current_method_exec):
             return None
         subtask_execs = self.current_method_exec.subtask_execs
         ind = self.subtask_exec_index
@@ -133,21 +207,63 @@ class FrameContext:
         else:
             return None
 
+    def get_cand_next_subtask_execs(self):
+        # s,e = self._index_eff_span(self.child_exec_index)
+        s,e = self.eff_span
+
+        subtask_execs = []
+        method_exec = self.current_method_exec
+        for i in range(s,e):
+            subtask_execs.append(method_exec.subtask_execs[i])
+        return subtask_execs
 
     @property
     def is_nomatch(self):
-        return not self.possible_method_execs
+        return not self.child_execs
+
+    def __str__(self):
+        task_name = self.task_exec.task.name
+        if(not self.is_operator_frame):
+            s = ""
+            start, end = self.eff_span
+            subtask_execs = self.current_method_exec.subtask_execs
+            for i in range(len(subtask_execs)):
+                ex = subtask_execs[i]
+                if(i == start):
+                    s += "\033[92m"
+                if(i == self.subtask_exec_index):
+                    s += "|"
+                s += ex.task.name
+                if(ex.task.optional): s += "*"
+
+                if(i == end-1):
+                    s += "\033[0m"
+                if(i != len(subtask_execs)-1):
+                    s += ", "
+
+            return f"{task_name} -> {s}"
+        else:    
+            return f"{self.current_operator_exec}"
+
+    __repr__ = __str__
 
 
 class Cursor:
-    def __init__(self):
+    def __init__(self, trace=None):
         # Current task execution being processed
-        self.trace = Trace()
+        self.trace = Trace() if trace is None else trace
         self.reset()
 
     def reset(self):
         self.current_frame = None
         self.stack = []
+
+    def copy(self):
+        new_cursor = Cursor()
+        new_cursor.trace = self.trace
+        new_cursor.stack = self.stack
+        new_cursor.current_frame = self.current_frame
+        return new_cursor
 
     def is_at_end(self):
         return self.current_frame is None
@@ -165,6 +281,13 @@ class Cursor:
     def current_subtask_exec(self):
         return self.current_frame.current_subtask_exec
 
+    @property
+    def is_operator_frame(self):
+        return self.current_frame.is_operator_frame
+
+    def get_cand_next_subtask_execs(self):
+        return self.current_frame.get_cand_next_subtask_execs()
+
     def _pop_frame(self):
         if(len(self.stack) == 0):
             self.current_frame = None
@@ -173,8 +296,6 @@ class Cursor:
         self.current_frame = self.stack[-1]
         self.stack.pop()
         return self.current_frame
-
-
 
     def advance_subtask(self, trace=None):
         ''' Try to move the cursor to the next position by: 
@@ -187,18 +308,19 @@ class Cursor:
         while True:
             # Advance to next subtask exececution in current MethodEx
             curr_frame = self.current_frame
-            if(curr_frame.current_subtask_exec):
-                curr_frame.current_subtask_exec.status = ExStatus.SUCCESS
-            next_frame = self.current_frame.next_subtask_frame()
-            if(next_frame is not None):
-                if(trace):
-                    trace.add(TraceKind.ADVANCE_SUBTASK, curr_frame, next_frame)
-                break
+            if(not curr_frame.is_operator_frame):
+                if(curr_frame.current_subtask_exec):
+                    curr_frame.current_subtask_exec.status = ExStatus.SUCCESS
+                next_frame = self.current_frame.next_subtask_frame()
+                if(next_frame is not None):
+                    if(trace):
+                        trace.add(TraceKind.ADVANCE_SUBTASK, curr_frame, next_frame)
+                    break
             
-            # If subtask sequence exhasted try popping frame from stack
-            curr_frame.current_task_exec.status = ExStatus.SUCCESS
-            if(curr_frame.current_method_exec):
-                curr_frame.current_method_exec.status = ExStatus.SUCCESS
+                # If subtask sequence exhasted try popping frame from stack
+                curr_frame.current_task_exec.status = ExStatus.SUCCESS
+            if(curr_frame.current_child_exec):
+                curr_frame.current_child_exec.status = ExStatus.SUCCESS
             next_frame = self._pop_frame()
             if(next_frame is None):
                 break
@@ -208,7 +330,7 @@ class Cursor:
 
         self.current_frame = next_frame
 
-    def push_task_exec(self, task_exec, method_execs, method_ind=0, trace=None):
+    def push_task_exec(self, task_exec, child_execs, child_ind=0, trace=None):
         ''' Recurse into a new frame from a task execution and
             its list of method executions
         ''' 
@@ -218,9 +340,9 @@ class Cursor:
 
         # Make a new frame pointing at the selected MethodEx
         curr_frame = self.current_frame        
-        next_frame = FrameContext.new_frame(task_exec, method_execs, method_ind)
-        next_frame.current_task_exec.status = ExStatus.IN_PROGRESS
-        next_frame.current_method_exec.status = ExStatus.IN_PROGRESS
+        next_frame = FrameContext.new_frame(task_exec, child_execs, child_ind)
+        next_frame.current_child_exec.status = ExStatus.IN_PROGRESS
+        next_frame.current_child_exec.status = ExStatus.IN_PROGRESS
         if(trace):
             trace.add(TraceKind.SELECT_METHOD,       curr_frame, next_frame)
             trace.add(TraceKind.FIRST_SUBTASK, curr_frame, next_frame)
@@ -250,11 +372,10 @@ class Cursor:
 
             if not next_frame:
                 return False
-
             
             # Try next possible MethodEx
             curr_frame = self.current_frame
-            next_frame = self.current_frame.next_method_frame()
+            next_frame = self.current_frame.next_child_frame()
             if(next_frame is not None):
                 if(trace):
                     trace.add(TraceKind.SELECT_METHOD,       curr_frame, next_frame)
@@ -276,7 +397,7 @@ class Cursor:
 
         next_frame = FrameContext.new_frame(
             curr_frame.task_exec,
-            curr_frame.possible_method_execs,
+            curr_frame.child_execs,
             method_ind)
 
         next_frame.current_method_exec.status = ExStatus.IN_PROGRESS
@@ -325,9 +446,9 @@ class Cursor:
             raise ValueError(f"No frame in plan stack associated with {task_exec}.")
 
         # Add the method_exec to the possibilities in the frame
-        if(task_frame.possible_method_execs is None):
-            task_frame.possible_method_execs = []
-        task_frame.possible_method_execs.append(method_exec)
+        if(task_frame.child_execs is None):
+            task_frame.child_execs = []
+        task_frame.child_execs.append(method_exec)
 
         if(trace):
             trace.add(TraceKind.USER_ADD_METHOD, method_exec, task_frame)
@@ -362,8 +483,8 @@ class Cursor:
             print("Current Method: None")
             print("Current Subtask Index: N/A")
 
-        print(f"Possible MethodExs: {len(frame.possible_method_execs)}")
-        print(f"Current Method Index: {frame.method_exec_index}")
+        print(f"Possible MethodExs: {len(frame.child_execs)}")
+        print(f"Current Method Index: {frame.child_exec_index}")
         print(f"Stack Depth: {len(self.stack)}")
 
         if self.stack:
@@ -379,6 +500,11 @@ class Cursor:
                 print(f"  ... and {len(self.stack) - 3} more")
 
         print("==================================\n")
+
+    def __str__(self):
+        return f"Cursor(depth={len(self.stack)}, {self.current_frame})"
+
+    __repr__ = __str__
 
 
 class TaskManager:
@@ -554,7 +680,7 @@ class HtnPlanner2:
         self.domain_network = domain
 
         # Create cursor to track planning state
-        self.cursor = Cursor()
+        self.cursors = [Cursor()]
 
         if self.enable_logging:
             self.logger.info(f"Domain network built with {len(domain)} task types")
@@ -573,7 +699,7 @@ class HtnPlanner2:
     #     return self.trace.get_current_trace(include_states)
 
     def is_exhausted(self):
-        return self.root_task_queue.is_empty() and self.cursor.is_at_end()
+        return self.root_task_queue.is_empty() and all(c.is_at_end() in self.cursors)
 
     # --------------------------
     # : plan()
@@ -589,24 +715,10 @@ class HtnPlanner2:
         if(self.is_exhausted()):
             raise StopException("There are no tasks to plan for")
 
-    def _next_task_exec(self):
-        # If cursor is exhausted, pop off new root task, and make it into a TaskEx.
-        if(self.cursor.is_at_end()):
-            if(self.root_task_queue.is_empty()):
-                self.trace.add(TraceKind.ROOT_TASKS_EXHAUSTED)
-                return None
 
-            root_task = self.root_task_queue.get_next_task()
-            task_exec = root_task.as_task_exec(self.state)
-            self.trace.add(TraceKind.NEW_ROOT_TASK, task_exec)
 
-        # Otherwise use the TaskEx that the cursor is pointing to
-        else:
-            task_exec = self.cursor.current_subtask_exec
 
-        return task_exec
-
-    def _handle_task_exec(self, task_exec, push_nomatch_frames=False):
+    def _expand_taskex(self, task_exec, cursor, push_nomatch_frames=False):
         ''' Handle the execution of a TaskEx instance
             :return: A TaskKind Enum signaling how the execution was carried out
         '''
@@ -622,8 +734,8 @@ class HtnPlanner2:
         if(child_execs is None or len(child_execs) == 0):
             if(push_nomatch_frames):
                 print("NO MATCH FRAME", child_execs)
-                self.cursor.push_nomatch_frame(task_exec, child_execs, trace=self.trace)
-                return TraceKind.FIRST_SUBTASK
+                cursor.push_nomatch_frame(task_exec, child_execs, trace=self.trace)
+                return None, TraceKind.FIRST_SUBTASK
             else:
                 
                 backtrack_kind = (
@@ -631,58 +743,285 @@ class HtnPlanner2:
                     TraceKind.BACKTRACK_NO_MATCH
                 )[child_execs is not None]
 
-                self.cursor.backtrack(backtrack_kind, trace=self.trace)
-                return backtrack_kind
+                cursor.backtrack(backtrack_kind, trace=self.trace)
+                return None, backtrack_kind
 
-        # Primitive Task Case: execute Operator
-        if(isinstance(child_execs[0], OperatorEx)):
-            operator_exec = child_execs[0]
-            success = self._apply_operator_execution(operator_exec)
-            if(success):
-                self.trace.add(TraceKind.APPLY_OPERATOR, operator_exec)
-                if(self.cursor.current_frame):
-                    self.cursor.advance_subtask(trace=self.trace)
-                return TraceKind.ADVANCE_SUBTASK
-            else:
-                self.cursor.backtrack(
-                    TraceKind.BACKTRACK_OPERATOR_FAIL,
-                    trace=self.trace
-                )
+        return child_execs, None
 
-                return TraceKind.BACKTRACK_OPERATOR_FAIL
-        # Higher-Oder Task Case: Push a new frame with options for 
-        #    executing the task (will be handled in next loop).
-        else:
-            self.cursor.push_task_exec(task_exec, child_execs, trace=self.trace)
-            task_exec.status = ExStatus.IN_PROGRESS
-            return TraceKind.FIRST_SUBTASK
+        
+    def _pop_next_root_task(self, push_nomatch_frame):
+        trace = self.cursors[0].trace
+        cursor = Cursor(trace)
+        root_task = self.root_task_queue.get_next_task()
+        
+
+        task_exec = root_task.as_task_exec(self.state)
+        child_execs, trace_kind = self._expand_taskex(task_exec, cursor, push_nomatch_frame)
+        cursor.push_task_exec(task_exec, child_execs, trace=trace)
+
+        trace.add(TraceKind.NEW_ROOT_TASK, task_exec)
+        if(trace_kind is not None):
+            trace.add(trace_kind, task_exec)
+        
+        self.cursors = [cursor]
 
 
-    def plan(self, stop_kinds=[], push_nomatch_frame=False) -> List:
+    def plan(self, multiheaded=False, stop_kinds=[], push_nomatch_frame=False) -> List:
         """
         Execute the planning process.
         :return: The complete plan.
         """
         self._plan_start()
 
+        
+
+        while True:
+            # If all cursors exhausted, create a new cursor by popping off a new root task
+            if(all(cursor.is_at_end() for cursor in self.cursors) and
+               not self.root_task_queue.is_empty()):
+                self._pop_next_root_task(push_nomatch_frame)
+
+            # If root tasks all exhausted terminate
+            else:
+                self.trace = cursors[0].trace
+                self.trace.add(TraceKind.ROOT_TASKS_EXHAUSTED)
+                return trace
+
+
+            # Plan all cursors down to their next stop point 
+            #  or to their next operator execution, whatever comes first
+            halted_cursors = []
+            operator_cursors = []
+            cursors = [*self.cursors]
+            while(len(cursors) > 0):
+                print("CURSORS:", cursors)
+                cursor = cursors.pop()
+                new_cursors = [] if multiheaded else [cursor]
+                    
+                # If the current cursor is pointing at an operator exec, save it
+                if(cursor.is_operator_frame):
+                    operator_cursors.append(cursor)
+                    continue
+
+                
+                if(multiheaded):
+                    # Go through the next subtasks pointed to by the current frame
+                    for task_exec in cursor.get_cand_next_subtask_execs():
+                        # print(">>", task_exec)
+                        child_execs, trace_kind = self._expand_taskex(task_exec, cursor, push_nomatch_frame)
+
+                        if(child_execs is None): continue
+                            
+                        for child_exec in child_execs:
+                            # if(isinstance(child_exec, MethodEx)):
+                            #     print("--", child_exec, child_exec.subtask_execs)
+                            # else:
+                            #     print("--", child_exec)
+                            new_cursor = cursor.copy()
+                            new_cursor.push_task_exec(task_exec, [child_exec], trace=cursor.trace)
+                            trace_kind = TraceKind.EXPAND_TO_METHOD if isinstance(child_exec, MethodEx) else TraceKind.EXPAND_TO_OPERATOR
+                            # print(trace_kind)
+                            if(trace_kind in stop_kinds or trace_kind is None):
+                                halted_cursors.append(new_cursor)
+                            else:
+                                new_cursors.append(new_cursor)
+                        task_exec.status = ExStatus.IN_PROGRESS
+
+                else:
+                    task_exec = cursor.current_subtask_exec
+                    child_execs, trace_kind = self._expand_taskex(task_exec, cursor, push_nomatch_frame)
+
+                    if(child_execs is None): continue
+                        
+                    trace_kind = cursor.push_task_exec(task_exec, [child_exec], trace=cursor.trace)
+                    task_exec.status = ExStatus.IN_PROGRESS
+
+                    if(trace_kind in stop_kinds or trace_kind is None):
+                        should_break = True
+
+                        # trace_kind = self._step_cursor(task_exec, cursor, stop_kinds, push_nomatch_frame)
+                cursors += new_cursors
+                
+
+            print("OPERATOR CURSORS:", [c.current_frame.current_operator_exec for c in operator_cursors])
+            print("HALT CURSORS:", len(halted_cursors))
+
+            if(len(halted_cursors) > 0):
+                self.cursors = halted_cursors
+                break; 
+
+            if(self.env is not None):
+                cursor = operator_cursors[0]
+                self._handle_operator_exec(cursor)
+                self.cursors = cursor
+                break;
+
+
+        # if(not multiheaded):
+        #     while True:
+        #         # TODO: Is there a case where cursors[0] resolves to something different or can we 
+        #         #   grab this outside of the loop?
+        #         cursor = self.cursors[0]
+        #         trace_kind = self._step_cursor_linear(cursor, stop_kinds, push_nomatch_frame)
+        #         if(trace_kind in stop_kinds or trace_kind is None):
+        #             return self.trace
+
+        # else:
+        #     # TODO: This needs to work even if the cursor list changes while looping
+        #     #   we might for instance advance one cursor in a way that invalidates others
+        #     #   or add new cursors as we bifurcate the path.
+        #     for cursor in self.cursors:
+        #         while True:
+        #             trace_kind = self._step_cursor_multiheaded(cursor, stop_kinds, push_nomatch_frame)
+        #             if(trace_kind in stop_kinds or trace_kind is None):
+        #                 break
+
+
+        # for cursor in self.cursors:
+
         # Main Plan Loop:
-        #  Each loop handles one TaskEx instance and makes one move of the Cursor.
+        #  Each loop handles one TaskEx instance and makes one move of a Cursor.
         #   (the Cursor holds the current plan state and stack).
         #  Every Cursor movement is gaurenteed to either:
         #   1. Enter a valid frame w/ a parent TaskEx, MethodEx, and current sub-TaskEx.
         #   2. Exhaust the cursor (the current TaskEx will come from the root_task_queue)
-        while True:
-            task_exec = self._next_task_exec()
+            # while True:
 
-            if(task_exec is None):
-                break
+                # self._step_cursor_linear
 
-            # Handle the current task execution
-            trace_kind = self._handle_task_exec(task_exec, push_nomatch_frame)
-            if(trace_kind in stop_kinds):
-                return self.trace
+                # task_exec = self._next_task_exec()
+
+                # if(task_exec is None):
+                #     break
+
+                # # Handle the current task execution
+                # trace_kind = self._handle_task_exec(task_exec, cursor, push_nomatch_frame)
+                # if(trace_kind in stop_kinds):
+                #     return self.trace
 
         return self.trace
+
+    def _handle_operator_exec(self, cursor):
+        operator_exec = cursor.current_frame.current_operator_exec
+        success = self._apply_operator_execution(operator_exec)
+        if(success):
+            cursor.trace.add(TraceKind.APPLY_OPERATOR, operator_exec)
+            if(cursor.current_frame):
+                cursor.advance_subtask(trace=cursor.trace)
+            return TraceKind.ADVANCE_SUBTASK
+        else:
+            cursor.backtrack(
+                TraceKind.BACKTRACK_OPERATOR_FAIL,
+                trace=cursor.trace
+            )
+            return TraceKind.BACKTRACK_OPERATOR_FAIL
+
+
+    def _next_task_exec(self, cursor):
+        # If cursors are exhausted, pop off new root task, and make it into a TaskEx.
+        if(cursor.is_at_end()):
+            if(self.root_task_queue.is_empty()):
+                self.trace.add(TraceKind.ROOT_TASKS_EXHAUSTED)
+                return None
+
+            root_task = self.root_task_queue.get_next_task()
+            task_exec = root_task.as_task_exec(self.state)
+            self.trace.add(TraceKind.NEW_ROOT_TASK, task_exec)
+
+        # Otherwise find all the next TaskExs that the cursor is pointing to
+        else:
+            task_exec = cursor.current_subtask_exec
+
+        return task_exec
+
+    # def _step_cursor(self, task_exec, cursor, stop_kinds, push_nomatch_frame):
+    #     if(task_exec is None):
+    #         return None
+
+    #     # Expand the current task execution
+    #     child_execs, trace_kind = self._expand_taskex(task_exec, cursor, push_nomatch_frame)
+
+    #     if(child_execs is None):
+    #         return trace_kind
+
+    #     # Primitive Task Case: execute Operator
+    #     if(isinstance(child_execs[0], OperatorEx)):
+    #         trace_kind = self._handle_operator_exec(cursor, child_execs[0])
+
+    #     # Higher-Order Task Case: Push a new frame with options for 
+    #     #    executing the task (will be handled in next loop).
+    #     else:
+    #         cursor.push_task_exec(task_exec, child_execs, trace=self.trace)
+    #         task_exec.status = ExStatus.IN_PROGRESS
+    #         trace_kind = TraceKind.FIRST_SUBTASK
+
+    #     return trace_kind
+
+
+    # def _all_next_task_execs(self, cursor):
+        
+
+
+    # def _step_cursor_multiheaded(self, cursor, stop_kinds, push_nomatch_frame):
+    #     if(cursor.is_at_end()):
+    #         return None
+        
+    #     task_execs = cursor.get_cand_next_subtask_execs()
+
+    #     # print(cursor)
+    #     if(task_execs is None or len(task_execs) == 0):
+    #         return None
+
+    #     pairs = []
+    #     should_branch = False
+    #     trace_kind = None
+    #     pref = [None, TraceKind.BACKTRACK_NO_CHILDREN, TraceKind.BACKTRACK_NO_MATCH]
+
+    #     for task_exec in task_execs:
+    #         # Expand the current task execution
+    #         child_execs, _trace_kind = self._expand_taskex(task_exec, cursor, push_nomatch_frame)
+
+
+    #         if(pref.index(_trace_kind) > pref.index(trace_kind)):
+    #             trace_kind = _trace_kind
+
+    #         if(child_execs is None):
+    #             continue
+
+    #         # If the current frame has any staged operator executions then if 
+    #         #   there are also any staged method executions those should be handled 
+    #         #   by copies of the current cursor.
+    #         if(any(isinstance(child_exec, OperatorEx) for child_exec in child_execs)):
+    #             should_branch = True
+
+    #         pairs.push(task_exec, child_execs)
+
+    #     if(len(pairs) == 0):
+    #         return trace_kind
+
+    #     for task_exec, child_execs in pairs:
+    #         for child_exec in child_execs:
+    #             # Primitive Task Case: execute Operator
+    #             if(isinstance(child_exec, OperatorEx)):
+    #                 trace_kind = self._handle_operator_exec(cursor, child_exec)
+
+    #             # Higher-Order Task Case: Push a new frame with options for 
+    #             #    executing the task (will be handled in next loop).
+    #             else:
+    #                 c = cursor
+    #                 if(should_branch):
+    #                     c = cursor.copy()
+    #                     self.cursors.append(c)
+    #                 c.push_task_exec(task_exec, [child_exec], trace=self.trace)
+    #                 task_exec.status = ExStatus.IN_PROGRESS
+    #                 trace_kind = TraceKind.FIRST_SUBTASK
+    #                 should_branch = True
+
+    #     return trace_kind
+
+
+
+
             
 
     # --------------------------
@@ -750,12 +1089,14 @@ class HtnPlanner2:
             for i, task in enumerate(self.root_task_queue.queue):
                 print(f"  Task {i}: {task.name} (status: {task.status})")
 
-        print(f"Current task: {self.cursor.current_task.name if self.cursor.current_task else None}")
-        print(f"Current method: {self.cursor.current_method.name if self.cursor.current_method else None}")
-        print(f"Current subtask index: {self.cursor.current_subtask_index}")
-        print(f"Available methods: {len(self.cursor.available_method_execs)}")
-        print(f"Current method index: {self.cursor.current_method_index}")
-        print(f"Stack depth: {len(self.cursor.stack)}")
+        cursor = self.cursors[0]
+
+        print(f"Current task: {cursor.current_task.name if cursor.current_task else None}")
+        print(f"Current method: {cursor.current_method.name if cursor.current_method else None}")
+        print(f"Current subtask index: {cursor.current_subtask_index}")
+        print(f"Available methods: {len(cursor.available_method_execs)}")
+        print(f"Current method index: {cursor.current_method_index}")
+        print(f"Stack depth: {len(cursor.stack)}")
 
         print(f"Trace entries: {len(self.trace.entries)}")
         for i, entry in enumerate(self.trace.entries[-5:]):  # Show last 5 entries
@@ -861,7 +1202,7 @@ class HtnPlanner2:
 
     def get_next_method_execs(self):
         frame = self.cursor.current_frame
-        method_execs = frame.possible_method_execs
+        method_execs = frame.child_execs
         return frame.task_exec, method_execs
 
 
@@ -885,98 +1226,6 @@ class HtnPlanner2:
     def add_method_exec(self, method_exec, task_exec=None):
         self.cursor.add_method_exec(method_exec, task_exec, self.trace)
 
-        # if self.enable_logging:
-        #     self.logger.log_function()
-        # # Clear trace
-        # # self.trace = Trace()
-        # if not self.cursor.current_task or self.cursor.current_task.status == 'succeeded':
-        #     if not self.root_task_execs:
-        #         if self.enable_logging:
-        #             self.logger.error("No tasks to plan for")
-        #         raise StopException("There are no tasks to plan for. You must add tasks to the planner first"
-        #                             " using add_tasks().")
-        #     if not self._set_cursor_to_new_task():
-        #         return self.cursor.current_task, None
-
-        # if self.enable_logging:
-        #     self.logger.info(f"Getting the next applicable method for task ({self.cursor.current_task.name})")
-
-        # # No more methods
-        # if self.cursor.current_method_index >= len(self.cursor.available_method_execs):
-        #     if self.enable_logging:
-        #         self.logger.info(f"All methods for task ({self.cursor.current_task.name}) have been returned."
-        #                           f" No remaining methods.")
-        #     return self.cursor.current_task, None
-
-        # # Return all methods
-        # if all_methods:
-        #     # Set method index to end of list so that if called again, there is nothing to return
-        #     # self.cursor.current_method_index = len(self.cursor.available_method_execs)
-        #     self.cursor.current_method_index = len(self.domain_network[self.cursor.current_task.id])
-        #     # return self.cursor.current_task, self.cursor.available_method_execs
-        #     return self.cursor.current_task, self.domain_network[self.cursor.current_task.id]
-
-
-        # # Get next method
-        # method = self.cursor.available_method_execs[self.cursor.current_method_index]
-        # self.cursor.current_method = method
-
-
-        # # Add to trace
-        # self.trace.add_method(
-        #     self.cursor.current_task,
-        #     method,
-        #     f"Method #{self.cursor.current_method_index + 1} shown during interactive stepping"
-        # )
-
-        # # Advance to next method for next call
-        # self.cursor.current_method_index += 1
-
-        # if self.enable_logging:
-        #     self.logger.info(f"Providing method: {method.name} for task {self.cursor.current_task.name}")
-
-        # return self.cursor.current_task, [method]
-
-    # def apply_method_application(self, task: TaskEx, method_to_apply: Any):
-    #     """
-    #     Steps to the next subtask of a method.
-    #     :param task: The current task
-    #     :param method_to_apply: The method to apply to the task
-    #     :return: The plan after applying the method
-    #     """
-    #     if self.enable_logging:
-    #         self.logger.log_function()
-    #     """
-    #     if not self.cursor.current_task:
-    #         self.cursor.current_task = task
-    #     self.cursor.available_method_execs.append(method_to_apply.method)
-    #     self.cursor.current_method_index = 0
-    #     self.cursor.current_method = method_to_apply.method
-    #     self.cursor.current_subtask_index = 0
-    #     """
-    #     if not self.cursor.current_task:
-    #         self.cursor.set_task(task)
-    #     self.cursor.available_method_execs.append(method_to_apply.method)
-    #     self.cursor.current_method = method_to_apply.method
-
-
-
-    #     # Add to trace
-    #     self.trace.add_method(
-    #         self.cursor.current_task,
-    #         method_to_apply.method,
-    #         f"Applying subtasks of method ({method_to_apply.method.name})"
-    #     )
-    #     print(f"Method in apply method application: {method_to_apply.method}")
-    #     # Set cursor to this method
-    #     # self.cursor.available_method_execs.append(method)
-    #     # self.cursor.current_method = method
-    #     # self.cursor.current_subtask_index = 0
-    #     # self.cursor.current_method_index = 0
-
-    #     return self.plan(interactive=True)
-
-
 
     ####################
     # HELPER FUNCTIONS #
@@ -986,6 +1235,7 @@ class HtnPlanner2:
         """Execute an operator and update state."""
 
         # Execute in environment if available
+        # print(operator_exec)
 
         state_before = deepcopy(self.state)
         
@@ -1027,315 +1277,106 @@ class HtnPlanner2:
 
         return success
             
-                
 
-                # # Add operator to trace
-                # self.trace.add_operator(
-                #     self.cursor.current_task,
-                #     result,
-                #     success,
-                #     state_before=state_before,
-                #     state_after=state_after
-                # )
-
-                # # Check execution result
-                # if not success:
-                #     if self.enable_logging:
-                #         self.logger.error(f"Operator {result.name} failed in environment")
-                #     self.cursor.current_task.status = 'failed'
-                #     return False
-
-            
-                # self.cursor.current_task.status = 'failed'
-
-                # # Add failed operator to trace
-                # self.trace.add_operator(
-                #     self.cursor.current_task,
-                #     result,
-                #     False,
-                #     state_before=deepcopy(self.state),
-                #     state_after=None
-                # )
-
-                # if self.enable_logging:
-                #     self.logger.error(f"Failed to execute operator {result.name}: {str(e)}")
-
-                
-        # else:
-        #     # No environment, just add to trace
-        #     self.trace.add_operator(
-        #         self.cursor.current_task,
-        #         result,
-        #         True,
-        #         state_before=deepcopy(self.state),
-        #         state_after=deepcopy(self.state)
-        #     )
-
-        # if self.enable_logging:
-        #     self.logger.info(f"Executing operator {result.name} was successful")
-        # return True
-
-    # def _add_task_exec(self, task_exec: TaskEx) -> None:
-    #     """Add a task to the root tasks queue based on priority."""
+    # def _get_method_executions(self) -> List[MethodEx]:
+    #     """Get methods applicable to the current task."""
     #     if self.enable_logging:
     #         self.logger.log_function()
-    #     if task_exec.task.priority == 'first' or not self.root_task_execs:
-    #         self.root_task_execs.insert(0, task_exec)
+    #         self.logger.info(f"Locating applicable methods for task {self.cursor.current_task.name}")
+
+    #     if not self.state:
+    #         raise ValueError("State must be set before getting applicable methods")
+
+    #     # Check if there are methods for this task type
+    #     if self.cursor.current_task.id not in self.domain_network:
     #         if self.enable_logging:
-    #             self.logger.info(f"Added task {task.name} as first task")
-    #     else:
-    #         priority_map = {'first': 0, 'high': 1, 'medium': 2, 'low': 3}
-    #         task_priority = priority_map.get(task_exec.task.priority)
+    #             self.logger.warning(f"No methods found for task {self.cursor.current_task.id}")
+    #         return []
 
-    #         for i, existing_task in enumerate(self.root_task_execs):
-    #             existing_priority = existing_task.tasks.priority
-    #             if isinstance(existing_priority, str):
-    #                 existing_priority = priority_map.get(existing_priority, 3)
+    #     applicable_methods = []
+    #     methods = self.domain_network[self.cursor.current_task.id]
 
-    #             if task_priority < existing_priority:
-    #                 pos = i
-    #                 self.root_task_execs.insert(i, task_exec)
-    #             else:
-    #                 pos = i + 1
-    #             self.root_task_execs.insert(pos, task_exec)
+    #     # Sort by cost if requested
+    #     if self.order_by_cost:
+    #         methods = sorted(methods, key=lambda m: m.cost)
+
+    #     # Check each method
+    #     visited = []
+    #     for method in methods:
+    #         result = method.applicable(self.cursor.current_task, self.state, str(self.trace.get_current_plan()), visited)
+    #         if result:
+    #             applicable_methods.append(result)
     #             if self.enable_logging:
-    #                 self.logger.info(f"Added task {task_exec} at position {pos} with priority {task.priority}")
-    #             return
+    #                 self.logger.info(f"Method {method.name} is applicable to task {self.cursor.current_task.name}")
 
-    #         self.root_task_execs.append(task)
-    #         if self.enable_logging:
-    #             self.logger.info(f"Added task {task_exec} at the end with priority {task.priority}")
+    #     if self.enable_logging:
+    #         self.logger.info(
+    #             f"Found {len(applicable_methods)} applicable methods for task {self.cursor.current_task.name}")
 
-    # def _add_tasks(self, tasks: List[Union[str, Tuple, Dict]]) -> None:
-    #     """
-    #     Internal method for adding tasks to the planning queue.
-    #     :param tasks: A list of task specifications.
-    #     :return: None
-    #     """
+    #     return applicable_methods
+
+    # def _process_current_task(self) -> bool:
+    #     """Process the current task by finding and applying methods."""
     #     if self.enable_logging:
     #         self.logger.log_function()
-    #     if self.validate:
-    #         validate_tasks(tasks)
+    #         self.logger.info(f"Processing task {self.cursor.current_task.name}")
 
-    #     for t in tasks:
-    #         task_name = t.get('name')
-    #         args = t.get('arguments', ())
-    #         priority = t.get('priority', 'low')
-    #         repeat = t.get('repeat', False)
+    #     # Add task entry to trace
+    #     self.trace.add_task(self.cursor.current_task)
 
-    #         task_exec = TaskEx(task_name, args=args, priority=priority, repeat=repeat)
-    #         self._add_task_exec(task_exec)
+    #     # If we already have a method, continue executing it
+    #     if self.cursor.current_method:
+    #         return self._continue_method_execution()
 
+    #     # Get applicable methods for this task
+    #     method_execs = self._get_method_executions()
+    #     if not method_execs:
     #         if self.enable_logging:
-    #             self.logger.info(f"Added task: ({task_exec}) with priority ({priority}), repeat={repeat}")
-
-    # def _backtrack(self) -> bool:
-    #     """
-    #     Attempt to backtrack to an alternative method.
-    #     :return: Whether planner is able to backtrack to an alternative method.
-    #     """
-    #     if self.enable_logging:
-    #         self.logger.log_function()
-    #         self.logger.info(f"Attempting to backtrack")
-
-    #     # Try to backtrack with the cursor
-    #     from_task = self.cursor.current_task
-    #     result = self.cursor.backtrack()
-
-    #     if result:
-    #         # Add backtrack entry to trace
-    #         self.trace.add_backtrack(
-    #             from_task,
-    #             self.cursor.current_task,
-    #             f"Trying alternative method {self.cursor.current_method.name}"
-    #         )
-
-    #         # Add method entry for the new method
-    #         self.trace.add_method(
-    #             self.cursor.current_task,
-    #             self.cursor.current_method,
-    #             "Method selected after backtracking"
-    #         )
-
-    #         if self.enable_logging:
-    #             self.logger.info(f"Backtracked to task {self.cursor.current_task.name}, "
-    #                              f"trying method {self.cursor.current_method.name}")
-    #         return True
-    #     else:
-    #         if self.enable_logging:
-    #             self.logger.warning("Backtracking failed, no alternative methods available")
-
-    #         # Add backtrack entry to trace
-    #         if self.cursor.stack:
-    #             parent_task = self.cursor.stack[-1][0]
-    #             self.trace.add_backtrack(
-    #                 from_task,
-    #                 parent_task,
-    #                 "No alternative methods available"
-    #             )
-    #         else:
-    #             self.trace.add_backtrack(
-    #                 from_task,
-    #                 None,
-    #                 "No alternative methods available and no parent task"
-    #             )
-
+    #             self.logger.warning(f"No applicable methods for task {self.cursor.current_task.name}")
+    #         self.cursor.current_task.status = 'failed'
     #         return False
 
-    # def _continue_method_execution(self) -> bool:
-    #     """Continue executing subtasks of the current method."""
+    #     # Store available methods for backtracking
+    #     self.cursor.available_method_execs = method_execs
+    #     self.cursor.current_method_index = 0
+    #     self.cursor.current_method = methods[0]
+    #     self.cursor.current_subtask_index = 0
+
+    #     # Add method entry to trace
+    #     self.trace.add_method(
+    #         self.cursor.current_task,
+    #         self.cursor.current_method,
+    #         "Method selected as first applicable method"
+    #     )
+
+    #     if self.enable_logging:
+    #         self.logger.info(
+    #             f"Selected method {self.cursor.current_method.name} for task {self.cursor.current_task.name}")
+
+    #     # Execute the selected method
+    #     return self._continue_method_execution()
+
+    # def _set_cursor_to_new_task(self):
     #     if self.enable_logging:
     #         self.logger.log_function()
-    #     if not self.cursor.current_method:
+    #     next_task = self.root_task_execs.pop(0)
+    #     if self.enable_logging:
+    #         self.logger.info(f"Moving on to new task: ({next_task.name})")
+    #     # Handle repeat tasks
+    #     if next_task.repeat > 0:
+    #         next_task.repeat -= 1
+    #         self.root_task_execs.insert(0, next_task)
+    #     self.cursor.set_task(next_task)
+    #     # Get and store applicable methods
+    #     method_execs = self._get_method_executions()
+    #     if not method_execs:
+    #         if self.enable_logging:
+    #             self.logger.info(f"No applicable methods found for task: ({self.cursor.current_task.name})")
     #         return False
 
-    #     subtasks = self.cursor.current_method.subtasks
-
-    #     if self.enable_logging:
-    #         self.logger.info(f"Continuing method {self.cursor.current_method.name} execution "
-    #                          f"from subtask {self.cursor.current_subtask_index+1} of {len(subtasks)}")
-
-    #     # Process each subtask starting from current index
-    #     while self.cursor.current_subtask_index < len(subtasks):
-    #         subtask = subtasks[self.cursor.current_subtask_index]
-
-    #         if isinstance(subtask, OperatorEx):
-    #             # Execute operator
-    #             result = self._execute_operator(subtask)
-    #             if not result:
-    #                 return False
-    #             # Move to next subtask
-    #             self.cursor.current_subtask_index += 1
-
-
-    #         elif isinstance(subtask, TaskEx):
-    #             if self.enable_logging:
-    #                 self.logger.info(f"Encountered subtask {subtask.name}")
-
-    #             # Add task entry to trace
-    #             self.trace.add_task(
-    #                 subtask,
-    #                 parent_task=self.cursor.current_task,
-    #                 parent_method=self.cursor.current_method
-    #             )
-
-    #             # Save current context before moving to subtask
-    #             self.cursor.push_context()
-    #             # Change current task to subtask
-    #             self.cursor.set_task(subtask)
-
-    #             # Return true to indicate we've moved to a subtask
-    #             # and should continue from there
-    #             return True
-
-    #     # All subtasks completed successfully
-    #     self.cursor.current_task.status = 'succeeded'
-    #     if self.enable_logging:
-    #         self.logger.info(f"All subtasks completed for task {self.cursor.current_task.name}")
-
+    #     self.cursor.available_method_execs = methods
+    #     self.cursor.current_method_index = 0
     #     return True
-
-    
-
-    def _get_method_executions(self) -> List[MethodEx]:
-        """Get methods applicable to the current task."""
-        if self.enable_logging:
-            self.logger.log_function()
-            self.logger.info(f"Locating applicable methods for task {self.cursor.current_task.name}")
-
-        if not self.state:
-            raise ValueError("State must be set before getting applicable methods")
-
-        # Check if there are methods for this task type
-        if self.cursor.current_task.id not in self.domain_network:
-            if self.enable_logging:
-                self.logger.warning(f"No methods found for task {self.cursor.current_task.id}")
-            return []
-
-        applicable_methods = []
-        methods = self.domain_network[self.cursor.current_task.id]
-
-        # Sort by cost if requested
-        if self.order_by_cost:
-            methods = sorted(methods, key=lambda m: m.cost)
-
-        # Check each method
-        visited = []
-        for method in methods:
-            result = method.applicable(self.cursor.current_task, self.state, str(self.trace.get_current_plan()), visited)
-            if result:
-                applicable_methods.append(result)
-                if self.enable_logging:
-                    self.logger.info(f"Method {method.name} is applicable to task {self.cursor.current_task.name}")
-
-        if self.enable_logging:
-            self.logger.info(
-                f"Found {len(applicable_methods)} applicable methods for task {self.cursor.current_task.name}")
-
-        return applicable_methods
-
-    def _process_current_task(self) -> bool:
-        """Process the current task by finding and applying methods."""
-        if self.enable_logging:
-            self.logger.log_function()
-            self.logger.info(f"Processing task {self.cursor.current_task.name}")
-
-        # Add task entry to trace
-        self.trace.add_task(self.cursor.current_task)
-
-        # If we already have a method, continue executing it
-        if self.cursor.current_method:
-            return self._continue_method_execution()
-
-        # Get applicable methods for this task
-        method_execs = self._get_method_executions()
-        if not method_execs:
-            if self.enable_logging:
-                self.logger.warning(f"No applicable methods for task {self.cursor.current_task.name}")
-            self.cursor.current_task.status = 'failed'
-            return False
-
-        # Store available methods for backtracking
-        self.cursor.available_method_execs = method_execs
-        self.cursor.current_method_index = 0
-        self.cursor.current_method = methods[0]
-        self.cursor.current_subtask_index = 0
-
-        # Add method entry to trace
-        self.trace.add_method(
-            self.cursor.current_task,
-            self.cursor.current_method,
-            "Method selected as first applicable method"
-        )
-
-        if self.enable_logging:
-            self.logger.info(
-                f"Selected method {self.cursor.current_method.name} for task {self.cursor.current_task.name}")
-
-        # Execute the selected method
-        return self._continue_method_execution()
-
-    def _set_cursor_to_new_task(self):
-        if self.enable_logging:
-            self.logger.log_function()
-        next_task = self.root_task_execs.pop(0)
-        if self.enable_logging:
-            self.logger.info(f"Moving on to new task: ({next_task.name})")
-        # Handle repeat tasks
-        if next_task.repeat > 0:
-            next_task.repeat -= 1
-            self.root_task_execs.insert(0, next_task)
-        self.cursor.set_task(next_task)
-        # Get and store applicable methods
-        method_execs = self._get_method_executions()
-        if not method_execs:
-            if self.enable_logging:
-                self.logger.info(f"No applicable methods found for task: ({self.cursor.current_task.name})")
-            return False
-
-        self.cursor.available_method_execs = methods
-        self.cursor.current_method_index = 0
-        return True
 
 
 

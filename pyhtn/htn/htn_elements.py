@@ -161,7 +161,8 @@ class Task(HTN_Element):
                  args: Sequence[Union[Var, Any]] = (),
                  cost=1.0,
                  priority='first',
-                 repeat=1):
+                 repeat=1,
+                 optional=False):
 
         if(len(args) == 0 and _args):
             args = _args
@@ -172,6 +173,7 @@ class Task(HTN_Element):
         self.domain_key = f'{name}/{len(args)}'
         self.priority = priority
         self.repeat = repeat
+        self.optional = optional
 
     def as_task_exec(self, state):
         '''Create a task execution from a task by taking its
@@ -198,6 +200,10 @@ class Task(HTN_Element):
 # ------------------------------------------------------
 # : Method
 
+class Unord:
+    def __init__(self, *args):
+        self.items = args
+
 class Method(HTN_Element, MatchableMixin):
     def __init__(self,
                  name: str,
@@ -213,7 +219,19 @@ class Method(HTN_Element, MatchableMixin):
         super().__init__(name, args, cost)
         self.id = f"M_{rand_uid()}"
 
-        self.subtasks = subtasks
+        _subtasks = []
+        _unord_spans = []
+
+        for subtask in subtasks:
+            if(isinstance(subtask, Unord)):
+                s = len(_subtasks)
+                _unord_spans.append( (s, s+len(subtask.items)) )
+                _subtasks += subtask.items
+            else:
+                _subtasks.append(subtask)
+
+        self.subtasks = _subtasks
+        self.unord_spans = _unord_spans
         self.preconditions = preconditions
 
     @property
@@ -252,6 +270,7 @@ class Method(HTN_Element, MatchableMixin):
         # Make Method exections and Task executions from each match.
         meth_execs = []
         for m_subst in match_substs:
+
             meth_exec = MethodEx(
                 self, state,
                 subst(m_subst, self.args),
