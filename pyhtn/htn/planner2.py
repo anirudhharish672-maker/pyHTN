@@ -30,19 +30,22 @@ class FrameContext:
     # The task execution being handled by this frame
     task_exec : TaskEx
 
+    # The the index of the task execution in the parent frame
+    task_ind : int
+
     # Child method or operator executions for current task execution.
     #  If one fails we can backtrack and try another
     child_execs : List[MethodEx]
 
     # Index of current MethodEx
-    child_exec_index : int
+    child_exec_ind : int
 
     # MethodEx indices already visited. Keep this list in case 
     #  for some reason we don't go through them in order
     visited_child_exec_inds : List[int]
 
     # Within the current MethodEx the index of the active subtask_exec
-    subtask_exec_index : int
+    subtask_exec_ind : int
 
     # The span of subtasks that this frame effectively covers 
     #   because they are part of an unordered group or are skippable
@@ -50,38 +53,34 @@ class FrameContext:
 
     # MethodEx indices already visited. Keep this list in case 
     #  for some reason we don't go through them in order
-    visted_subtask_exec_indices : List[int]
+    visted_subtask_exec_inds : List[int]
 
     is_operator_frame : bool
-    is_span_overflow : bool
+    skippables_overflow : bool
 
-    def __init__(self, task_exec, child_execs,
-                child_exec_index, visited_child_exec_inds,
-                subtask_exec_index, visted_subtask_exec_indices=[], eff_span=None):
+    def __init__(self, task_exec, task_ind, child_execs,
+                child_exec_ind, visited_child_exec_inds,
+                subtask_exec_ind, visted_subtask_exec_inds=[], eff_span=None):
         self.task_exec = task_exec
+        self.task_ind = task_ind
         self.child_execs = child_execs
-        self.child_exec_index = child_exec_index
+        self.child_exec_ind = child_exec_ind
         self.visited_child_exec_inds = visited_child_exec_inds
-        self.subtask_exec_index = subtask_exec_index
-        self.visted_subtask_exec_indices = visted_subtask_exec_indices
+        self.subtask_exec_ind = subtask_exec_ind
+        self.visted_subtask_exec_inds = visted_subtask_exec_inds
 
-        child = child_execs[child_exec_index] if child_exec_index < len(child_execs) else None
+        child = child_execs[child_exec_ind] if child_exec_ind < len(child_execs) else None
         self.is_operator_frame = isinstance(child, OperatorEx)
 
         if(eff_span is None and not self.is_operator_frame):
-            self.eff_span = self._index_eff_span(child_exec_index)
+            self.eff_span = self._index_eff_span(child_exec_ind)
         else:
             self.eff_span = eff_span
 
-        self.is_span_overflow = (not self.is_operator_frame and 
+        self.skippables_overflow = (not self.is_operator_frame and 
                                  self.eff_span[1] >= len(child.subtask_execs))
 
-    def _next_child_exec_index(self):
-        # TODO : Might consider policies other than trying MethodExs sequentially  
-        nxt = self.child_exec_index + 1 
-        if(nxt >= len(self.child_execs)):
-            return None
-        return nxt
+    
 
     def _index_eff_span(self, ind):
         ''' 
@@ -108,12 +107,37 @@ class FrameContext:
         # print(start, end, ", ".join([prnt(x) for x in sbtsks]))
         return start, end
 
-    def _next_subtask_exec_index(self):
+    def _next_child_exec_index(self):
+        # TODO : Might consider policies other than trying MethodExs sequentially  
+        nxt = self.child_exec_index + 1 
+        if(nxt >= len(self.child_execs)):
+            return None
+        return nxt
 
-        # self._resolve_index_eff_span(self.subtask_exec_index)
+    def next_child_frame(self):
+        ind = self._next_child_exec_ind()
 
-        # TODO : Might consider policies other than trying TaskExs sequentially  
-        nxt = self.subtask_exec_index + 1 
+        if(ind is None):
+            return None
+
+        return FrameContext(
+            task_exec =                self.task_exec,
+            task_ind =                 self.task_ind,
+            child_execs =              self.child_execs,
+            child_exec_ind =           ind, 
+            visited_child_exec_inds =  self.visited_child_exec_inds + [self.child_exec_ind],
+            subtask_exec_ind =         0,
+            visted_subtask_exec_inds = [],
+        )
+
+
+    def _next_subtask_exec_ind(self, visited_inds):
+        s,e = self.eff_span
+        for i in range(s,e+1):
+            if(i not in visited_inds):
+                nxt = i
+                    
+        # nxt = self.subtask_exec_ind + 1 
         subtask_execs = self.current_method_exec.subtask_execs
         if(nxt >= len(subtask_execs)):
             return None
@@ -121,51 +145,36 @@ class FrameContext:
         # self._index_eff_span(nxt)
         return nxt
 
-    def next_child_frame(self):
-        ind = self._next_child_exec_index()
-
-        if(ind is None):
-            return None
-
-        return FrameContext(
-            task_exec =                 self.task_exec,
-            child_execs =     self.child_execs,
-            child_exec_index =         ind, 
-            visited_child_exec_inds = (
-                self.visited_child_exec_inds + [self.child_exec_index],
-            ),
-            subtask_exec_index =         0,
-            visted_subtask_exec_indices = [],
-        )
-
     def next_subtask_frame(self):
-        ind = self._next_subtask_exec_index()
+        visited_inds = self.visted_subtask_exec_inds + [self.subtask_exec_ind]
+        ind = self._next_subtask_exec_ind(visited_inds)
         if(ind is None):
             return None
 
         return FrameContext(
-            task_exec =                  self.task_exec,
-            child_execs =               self.child_execs,
-            child_exec_index =          self.child_exec_index, 
-            visited_child_exec_inds = self.visited_child_exec_inds,
-            subtask_exec_index =         ind,
-            visted_subtask_exec_indices = (
-                self.visted_subtask_exec_indices + [self.subtask_exec_index]
-            ),
+            task_exec =                self.task_exec,
+            task_ind =                 self.task_ind,
+            child_execs =              self.child_execs,
+            child_exec_ind =           self.child_exec_ind, 
+            visited_child_exec_inds =  self.visited_child_exec_inds,
+            subtask_exec_ind =         ind,
+            visted_subtask_exec_inds = visited_inds
         )
 
     @classmethod
     def new_frame(self, task_exec, child_execs, 
-                    child_index=0,
-                    subtask_index=0):
+                    child_ind=0,
+                    task_ind=0,
+                    subtask_ind=0):
 
         return FrameContext(
-            task_exec =                  task_exec,
-            child_execs =               child_execs,
-            child_exec_index =          child_index, 
-            visited_child_exec_inds = [],
-            subtask_exec_index =         subtask_index,
-            visted_subtask_exec_indices = [],
+            task_exec =                task_exec,
+            task_ind =                 task_ind,
+            child_execs =              child_execs,
+            child_exec_ind =           child_ind, 
+            visited_child_exec_inds =  [],
+            subtask_exec_ind =         subtask_ind,
+            visted_subtask_exec_inds = [],
         )
 
     @property
@@ -175,7 +184,7 @@ class FrameContext:
     @property
     def current_child_exec(self):
         child_execs = self.child_execs
-        child_ind = self.child_exec_index
+        child_ind = self.child_exec_ind
         if(child_execs and child_ind is not None 
             and len(child_execs) > 0):
 
@@ -200,7 +209,7 @@ class FrameContext:
         if(self.is_operator_frame or not self.current_method_exec):
             return None
         subtask_execs = self.current_method_exec.subtask_execs
-        ind = self.subtask_exec_index
+        ind = self.subtask_exec_ind
         if(subtask_execs and ind is not None
            and len(subtask_execs) > 0):
             return subtask_execs[ind]
@@ -214,7 +223,7 @@ class FrameContext:
         subtask_execs = []
         method_exec = self.current_method_exec
         for i in range(s,e):
-            subtask_execs.append(method_exec.subtask_execs[i])
+            subtask_execs.append((i, method_exec.subtask_execs[i]))
         return subtask_execs
 
     @property
@@ -231,7 +240,7 @@ class FrameContext:
                 ex = subtask_execs[i]
                 if(i == start):
                     s += "\033[92m"
-                if(i == self.subtask_exec_index):
+                if(i == self.subtask_exec_ind):
                     s += "|"
                 s += ex.task.name
                 if(ex.task.optional): s += "*"
@@ -282,8 +291,16 @@ class Cursor:
         return self.current_frame.current_subtask_exec
 
     @property
+    def subtask_exec_ind(self):
+        return self.current_frame.subtask_exec_ind
+
+    @property
     def is_operator_frame(self):
         return self.current_frame.is_operator_frame
+
+    @property
+    def skippables_overflow(self):
+        return self.current_frame.skippables_overflow
 
     def get_cand_next_subtask_execs(self):
         return self.current_frame.get_cand_next_subtask_execs()
@@ -330,7 +347,7 @@ class Cursor:
 
         self.current_frame = next_frame
 
-    def push_task_exec(self, task_exec, child_execs, child_ind=0, trace=None):
+    def push_task_exec(self, task_exec, task_ind, child_execs, child_ind=0, trace=None):
         ''' Recurse into a new frame from a task execution and
             its list of method executions
         ''' 
@@ -340,7 +357,7 @@ class Cursor:
 
         # Make a new frame pointing at the selected MethodEx
         curr_frame = self.current_frame        
-        next_frame = FrameContext.new_frame(task_exec, child_execs, child_ind)
+        next_frame = FrameContext.new_frame(task_exec, child_execs, child_ind, task_ind)
         next_frame.current_child_exec.status = ExStatus.IN_PROGRESS
         next_frame.current_child_exec.status = ExStatus.IN_PROGRESS
         if(trace):
@@ -388,6 +405,25 @@ class Cursor:
             self.current_frame = next_frame
         return True
 
+    def branch_skip_overflow(self):
+        ''' In the event that the effective span of next tasks in this frame
+            overflows past the last task, (i.e. if the last remaining task turns 
+            out to be skippable), make a new branching cursor pointing to a
+            position in the parent frame beyond the parent task.
+        '''
+        curr_frame = self.current_frame
+        cursor = self.copy()
+        cursor._pop_frame()
+
+        # cursor.current_frame.
+
+
+
+
+
+
+
+
     def user_select_method_exec(self, method_ind=0, trace=None):
         # Make a new frame pointing at the selected MethodEx
         curr_frame = self.current_frame
@@ -398,7 +434,8 @@ class Cursor:
         next_frame = FrameContext.new_frame(
             curr_frame.task_exec,
             curr_frame.child_execs,
-            method_ind)
+            method_ind,
+            curr_frame.task_ind)
 
         next_frame.current_method_exec.status = ExStatus.IN_PROGRESS
 
@@ -408,7 +445,7 @@ class Cursor:
 
         self.current_frame = next_frame
 
-    def push_nomatch_frame(self, task_exec, method_execs, trace=None):
+    def push_nomatch_frame(self, task_exec, task_ind, method_execs, trace=None):
         ''' Recurse into an nomatch frame this is a kind of 
             frame where method_execs is None or []. In normal planning
             this is an invalid frame. When using the planner 
@@ -475,7 +512,7 @@ class Cursor:
 
         me = self.current_method_exec
         ste = self.current_subtask_exec
-        st_ind = frame.subtask_exec_index
+        st_ind = frame.subtask_exec_ind
         if me:
             print(f"Current MethodEx: {me}")
             print(f"Current SubtaskEx: {ste} ({st_ind+1}/{len(me.subtask_execs)})")
@@ -484,7 +521,7 @@ class Cursor:
             print("Current Subtask Index: N/A")
 
         print(f"Possible MethodExs: {len(frame.child_execs)}")
-        print(f"Current Method Index: {frame.child_exec_index}")
+        print(f"Current Method Index: {frame.child_exec_ind}")
         print(f"Stack Depth: {len(self.stack)}")
 
         if self.stack:
@@ -718,7 +755,7 @@ class HtnPlanner2:
 
 
 
-    def _expand_taskex(self, task_exec, cursor, push_nomatch_frames=False):
+    def _expand_taskex(self, task_exec, task_ind, cursor, push_nomatch_frames=False):
         ''' Handle the execution of a TaskEx instance
             :return: A TaskKind Enum signaling how the execution was carried out
         '''
@@ -734,7 +771,7 @@ class HtnPlanner2:
         if(child_execs is None or len(child_execs) == 0):
             if(push_nomatch_frames):
                 print("NO MATCH FRAME", child_execs)
-                cursor.push_nomatch_frame(task_exec, child_execs, trace=self.trace)
+                cursor.push_nomatch_frame(task_exec, task_ind, child_execs, trace=self.trace)
                 return None, TraceKind.FIRST_SUBTASK
             else:
                 
@@ -756,8 +793,8 @@ class HtnPlanner2:
         
 
         task_exec = root_task.as_task_exec(self.state)
-        child_execs, trace_kind = self._expand_taskex(task_exec, cursor, push_nomatch_frame)
-        cursor.push_task_exec(task_exec, child_execs, trace=trace)
+        child_execs, trace_kind = self._expand_taskex(task_exec, None, cursor, push_nomatch_frame)
+        cursor.push_task_exec(task_exec, None, child_execs, trace=trace)
 
         trace.add(TraceKind.NEW_ROOT_TASK, task_exec)
         if(trace_kind is not None):
@@ -799,16 +836,21 @@ class HtnPlanner2:
                 new_cursors = [] if multiheaded else [cursor]
                     
                 # If the current cursor is pointing at an operator exec, save it
+                #  for later to be part of the conflict set
                 if(cursor.is_operator_frame):
                     operator_cursors.append(cursor)
                     continue
 
+                if(cursor.skippables_overflow):
+                    print()
+                    print("OVERFLOWS", cursor)
+
                 
                 if(multiheaded):
                     # Go through the next subtasks pointed to by the current frame
-                    for task_exec in cursor.get_cand_next_subtask_execs():
+                    for task_ind, task_exec in cursor.get_cand_next_subtask_execs():
                         # print(">>", task_exec)
-                        child_execs, trace_kind = self._expand_taskex(task_exec, cursor, push_nomatch_frame)
+                        child_execs, trace_kind = self._expand_taskex(task_exec, task_ind, cursor, push_nomatch_frame)
 
                         if(child_execs is None): continue
                             
@@ -818,7 +860,7 @@ class HtnPlanner2:
                             # else:
                             #     print("--", child_exec)
                             new_cursor = cursor.copy()
-                            new_cursor.push_task_exec(task_exec, [child_exec], trace=cursor.trace)
+                            new_cursor.push_task_exec(task_exec, task_ind, [child_exec], trace=cursor.trace)
                             trace_kind = TraceKind.EXPAND_TO_METHOD if isinstance(child_exec, MethodEx) else TraceKind.EXPAND_TO_OPERATOR
                             # print(trace_kind)
                             if(trace_kind in stop_kinds or trace_kind is None):
@@ -828,12 +870,12 @@ class HtnPlanner2:
                         task_exec.status = ExStatus.IN_PROGRESS
 
                 else:
-                    task_exec = cursor.current_subtask_exec
-                    child_execs, trace_kind = self._expand_taskex(task_exec, cursor, push_nomatch_frame)
+                    task_ind, task_exec = cursor.subtask_exec_ind, cursor.current_subtask_exec
+                    child_execs, trace_kind = self._expand_taskex(task_exec, task_ind, cursor, push_nomatch_frame)
 
                     if(child_execs is None): continue
                         
-                    trace_kind = cursor.push_task_exec(task_exec, [child_exec], trace=cursor.trace)
+                    trace_kind = cursor.push_task_exec(task_exec, task_ind, [child_exec], trace=cursor.trace)
                     task_exec.status = ExStatus.IN_PROGRESS
 
                     if(trace_kind in stop_kinds or trace_kind is None):
@@ -1093,9 +1135,9 @@ class HtnPlanner2:
 
         print(f"Current task: {cursor.current_task.name if cursor.current_task else None}")
         print(f"Current method: {cursor.current_method.name if cursor.current_method else None}")
-        print(f"Current subtask index: {cursor.current_subtask_index}")
+        print(f"Current subtask index: {cursor.current_subtask_ind}")
         print(f"Available methods: {len(cursor.available_method_execs)}")
-        print(f"Current method index: {cursor.current_method_index}")
+        print(f"Current method index: {cursor.current_method_ind}")
         print(f"Stack depth: {len(cursor.stack)}")
 
         print(f"Trace entries: {len(self.trace.entries)}")
