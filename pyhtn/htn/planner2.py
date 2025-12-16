@@ -55,6 +55,9 @@ class FrameContext:
     #  for some reason we don't go through them in order
     visted_subtask_exec_inds : List[int]
 
+    skippable_inds : List[bool]
+    skip_check_ind : int
+
     is_operator_frame : bool
     skippables_overflow : bool
 
@@ -77,8 +80,12 @@ class FrameContext:
         else:
             self.eff_span = eff_span
 
-        self.skippables_overflow = (not self.is_operator_frame and 
-                                 self.eff_span[1] >= len(child.subtask_execs))
+        self.skippables_overflow = False
+        if(not self.is_operator_frame):
+            self.skippable_inds = [t.optional for t in child.subtask_execs]
+            self.skip_check_ind = self.eff_span[0]
+            self.skippables_overflow = self.eff_span[1] >= len(child.subtask_execs)
+
 
     
 
@@ -216,15 +223,32 @@ class FrameContext:
         else:
             return None
 
-    def get_cand_next_subtask_execs(self):
-        # s,e = self._index_eff_span(self.child_exec_index)
-        s,e = self.eff_span
+    # def get_cand_next_subtask_execs(self):
+    #     # s,e = self._index_eff_span(self.child_exec_index)
+    #     s,e = self.eff_span
 
-        subtask_execs = []
-        method_exec = self.current_method_exec
-        for i in range(s,e):
-            subtask_execs.append((i, method_exec.subtask_execs[i]))
-        return subtask_execs
+    #     subtask_execs = []
+    #     method_exec = self.current_method_exec
+    #     for i in range(s,e):
+    #         subtask_execs.append((i, method_exec.subtask_execs[i]))
+    #     return subtask_execs
+
+    def next_subtask_exec(self):
+        s,e = self.eff_span
+        ind = self.skip_check_ind
+        self.current_frame.skip_check_ind += 1
+        if(ind < e):
+            return method_exec.subtask_execs[i]
+        else:
+            return None
+
+        
+
+        # subtask_execs = []
+        # method_exec = self.current_method_exec
+        # for i in range(s,e):
+        #     subtask_execs.append((i, method_exec.subtask_execs[i]))
+        # return subtask_execs
 
     @property
     def is_nomatch(self):
@@ -302,8 +326,11 @@ class Cursor:
     def skippables_overflow(self):
         return self.current_frame.skippables_overflow
 
-    def get_cand_next_subtask_execs(self):
-        return self.current_frame.get_cand_next_subtask_execs()
+    # def get_cand_next_subtask_execs(self):
+    #     return self.current_frame.get_cand_next_subtask_execs()
+
+    def next_subtask_exec(self):
+        return self.current_frame.next_subtask_exec()
 
     def _pop_frame(self):
         if(len(self.stack) == 0):
@@ -412,8 +439,27 @@ class Cursor:
             position in the parent frame beyond the parent task.
         '''
         curr_frame = self.current_frame
+
+        # Make a copy
         cursor = self.copy()
-        cursor._pop_frame()
+
+        # Pop copy's current frame
+        curr_frame = cursor._pop_frame()
+
+        # Pop copy's parent frame
+        par_frame = cursor._pop_frame()
+
+        # Push a new frame with the cursor set beyond 
+        ind = curr_frame.task_ind + 1
+        cursor.stack.push(FrameContext(
+            task_exec =                par_frame.task_exec,
+            task_ind =                 par_frame.task_ind,
+            child_execs =              par_frame.child_execs,
+            child_exec_ind =           par_frame.child_exec_ind, 
+            visited_child_exec_inds =  par_frame.visited_child_exec_inds,
+            subtask_exec_ind =         ind,
+            visted_subtask_exec_inds = par_frame.visted_subtask_exec_inds,
+        ))
 
         # cursor.current_frame.
 
@@ -848,26 +894,42 @@ class HtnPlanner2:
                 
                 if(multiheaded):
                     # Go through the next subtasks pointed to by the current frame
-                    for task_ind, task_exec in cursor.get_cand_next_subtask_execs():
+                    while((tup := cursor.next_subtask_exec()) is not None):
+                        task_ind, task_exec = tup
+                    # for task_ind, task_exec in cursor.get_cand_next_subtask_execs():
                         # print(">>", task_exec)
                         child_execs, trace_kind = self._expand_taskex(task_exec, task_ind, cursor, push_nomatch_frame)
 
                         if(child_execs is None): continue
-                            
+                        
+                        do_break = False;
                         for child_exec in child_execs:
                             # if(isinstance(child_exec, MethodEx)):
                             #     print("--", child_exec, child_exec.subtask_execs)
                             # else:
                             #     print("--", child_exec)
+                            
+
+                            if isinstance(child_exec, MethodEx):
+                                new_cursors.append(cursor)
+                                do_break = True
+                                trace_kind = TraceKind.EXPAND_TO_METHOD 
+                            else:
+                                trace_kind = TraceKind.EXPAND_TO_OPERATOR
+
                             new_cursor = cursor.copy()
                             new_cursor.push_task_exec(task_exec, task_ind, [child_exec], trace=cursor.trace)
-                            trace_kind = TraceKind.EXPAND_TO_METHOD if isinstance(child_exec, MethodEx) else TraceKind.EXPAND_TO_OPERATOR
                             # print(trace_kind)
                             if(trace_kind in stop_kinds or trace_kind is None):
                                 halted_cursors.append(new_cursor)
                             else:
                                 new_cursors.append(new_cursor)
+
+                            
+
                         task_exec.status = ExStatus.IN_PROGRESS
+
+                        if(do_break): break;
 
                 else:
                     task_ind, task_exec = cursor.subtask_exec_ind, cursor.current_subtask_exec
