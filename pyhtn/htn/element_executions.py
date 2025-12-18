@@ -12,9 +12,11 @@ from enum import Enum
 
 class ExStatus(Enum):
     INITIALIZED : "ExStatus" = 1
-    IN_PROGRESS : "ExStatus" = 2
-    SUCCESS :     "ExStatus" = 3
-    FAILED :      "ExStatus" = 4
+    EXECUTABLE  : "ExStatus" = 2
+    SKIPPED     : "ExStatus" = 3
+    IN_PROGRESS : "ExStatus" = 4
+    SUCCESS :     "ExStatus" = 5
+    FAILED :      "ExStatus" = 6
 
 class ElementExecution(ABC):
     def __init__(self,
