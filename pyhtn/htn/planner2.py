@@ -51,6 +51,8 @@ class FrameContext:
     #   because they are part of an unordered group or are skippable
     eff_span : tuple[int,int] 
 
+    unord_span : tuple[int,int] 
+
     # MethodEx indices already visited. Keep this list in case 
     #  for some reason we don't go through them in order
     visted_subtask_exec_inds : List[int]
@@ -63,7 +65,7 @@ class FrameContext:
 
     def __init__(self, task_exec, task_ind, child_execs,
                 child_exec_ind, visited_child_exec_inds,
-                subtask_exec_ind, visted_subtask_exec_inds=[], eff_span=None):
+                subtask_exec_ind, visted_subtask_exec_inds=[]):
         self.task_exec = task_exec
         self.task_ind = task_ind
         self.child_execs = child_execs
@@ -78,23 +80,26 @@ class FrameContext:
         self.skippables_overflow = False
         if(not self.is_operator_frame):
             self.skippable_inds = [t.task.optional for t in child.subtask_execs]
-            self.eff_span = self._index_eff_span(subtask_exec_ind) if eff_span is None else eff_span
+            self._update_eff_span()
             self.eff_span_sweep_ind = self.eff_span[0]
             self.skippables_overflow = self.eff_span[1] >= len(child.subtask_execs)
         else:
-            self.eff_span = eff_span
+            self.eff_span = None
+            self.unord_span = None
     
 
-    def _index_eff_span(self, ind):
+    def _update_eff_span(self):
         ''' 
         For a particular subtask index, returns the effective span
         of other subtasks that are reachable within the same
         unordered group, or because subsequent subtasks are optional
         '''
+        ind = self.subtask_exec_ind
         method_exec = self.current_method_exec
         method = method_exec.method
         spans = method.unord_spans
         start, end = ind, ind+(len(method.subtasks) > 0)
+        self.unord_span = (ind, ind+(len(method.subtasks) > 0))
         # print()
         # print(ind, "SPANS", spans)
 
@@ -107,15 +112,19 @@ class FrameContext:
                 if(s < start): start = s
                 if(e > end): end = e
 
+            if(ind >= s and ind < e):
+                self.unord_span = (s,e)
+
         while(start < end and
               method_exec.subtask_execs[start].status == ExStatus.SUCCESS): 
             start += 1
             
         # print(start, end, len(method.subtasks))
-        sbtsks = [method.subtasks[i] for i in range(start, end)]
+        # sbtsks = [method.subtasks[i] for i in range(start, end)]
         # prnt = lambda x : x.name + ("*" if x.optional else "")
         # print(start, end, ", ".join([prnt(x) for x in sbtsks]))
-        return start, end
+        self.eff_span = (start, end)
+        # return start, end
 
     def _next_child_exec_index(self):
         # TODO : Might consider policies other than trying MethodExs sequentially  
@@ -141,40 +150,87 @@ class FrameContext:
         )
 
 
-    def _next_subtask_exec_ind(self, visited_inds):
-        ind = self.subtask_exec_ind
-        nxt = ind + 1
+    # def _next_subtask_exec_ind(self, visited_inds):
+    #     ind = self.subtask_exec_ind
+    #     nxt = ind + 1
 
-        method_exec = self.current_method_exec
-        method = method_exec.method
-        unord_spans = method.unord_spans
-        for s,e in unord_spans:
-            if(ind >= s and ind < e):
-                for i in range(s,e):
-                    if(i not in visited_inds):
-                        nxt = i
-                        break
+    #     method_exec = self.current_method_exec
+    #     method = method_exec.method
+    #     unord_spans = method.unord_spans
+    #     for s,e in unord_spans:
+    #         if(ind >= s and ind < e):
+    #             for i in range(s,e):
+    #                 if(i not in visited_inds):
+    #                     nxt = i
+    #                     break
+    #             break
+
+    #     # s,e = self.eff_span
+    #     # for i in range(s,e+1):
+    #     #     if(i not in visited_inds):
+    #     #         nxt = i
+    #     #         break
+                    
+    #     # nxt = self.subtask_exec_ind + 1 
+    #     subtask_execs = self.current_method_exec.subtask_execs
+    #     if(nxt >= len(subtask_execs)):
+    #         return None
+
+    #     # self._index_eff_span(nxt)
+    #     return nxt
+
+    def next_frame_after_commit(self, ind, is_success=False):
+
+        subtask_execs = self.current_method_exec.subtask_execs
+        s,e = self.eff_span
+        visited_inds = self.visted_subtask_exec_inds
+
+        # Find the unordered span that `ind` is in
+        unord_spans = self.current_method_exec.method.unord_spans
+        us,ue = ind, ind+1
+        for _us, _ue in unord_spans:
+            if(ind > _us and ind <= _ue):
+                us,ue = _us, _ue
                 break
 
-        # s,e = self.eff_span
-        # for i in range(s,e+1):
-        #     if(i not in visited_inds):
-        #         nxt = i
-        #         break
-                    
-        # nxt = self.subtask_exec_ind + 1 
-        subtask_execs = self.current_method_exec.subtask_execs
-        if(nxt >= len(subtask_execs)):
+        print("s,e", s,e)
+        print("us,ue", us,ue)
+
+        # Any not yet executed items before the start of the unordered
+        # span covered by 'ind' are skipped
+        for i in range(s, us):
+            ex = subtask_execs[i]
+            if(ex.status == ExStatus.EXECUTABLE):
+                ex.status = ExStatus.SKIPPED
+
+        # Any not yet executed items after the start of the unordered span
+        #   covered by 'ind' are rechecked for executability so their statuses
+        #   are reduced to INITIALIZED
+        for i in range(us, e):
+            if(i == ind): continue
+            ex = subtask_execs[i]
+            if(ex.status == ExStatus.EXECUTABLE):
+                ex.status = ExStatus.INITIALIZED
+
+        # Set the committed subtask to SUCCESS or IN_PROGRESS
+        ex = subtask_execs[ind]
+        ex.status = ExStatus.SUCCESS if is_success else ExStatus.IN_PROGRESS
+
+        # The next subtask in is before 'ind' if in progress or after
+        #  if success, or before the first un executed subtask in the 
+        #  undordered group
+        next_subtask_ind = ind+1 if is_success else ind
+        for i in range(us, ind):
+            # if(subtask_execs[i].status == ExStatus.INITIALIZED):
+            if(i not in visited_inds):
+                next_subtask_ind = i
+                break;
+
+        # If `nxt` is beyond the end of the method then return None 
+        if(next_subtask_ind >= len(subtask_execs)):
             return None
 
-        # self._index_eff_span(nxt)
-        return nxt
-
-    def next_subtask_frame(self):
-        visited_inds = self.visted_subtask_exec_inds + [self.subtask_exec_ind]
-        ind = self._next_subtask_exec_ind(visited_inds)
-        if(ind is None):
-            return None
+        visited_inds = self.visted_subtask_exec_inds + [ind]
 
         return FrameContext(
             task_exec =                self.task_exec,
@@ -182,14 +238,14 @@ class FrameContext:
             child_execs =              self.child_execs,
             child_exec_ind =           self.child_exec_ind, 
             visited_child_exec_inds =  self.visited_child_exec_inds,
-            subtask_exec_ind =         ind,
+            subtask_exec_ind =         next_subtask_ind,
             visted_subtask_exec_inds = visited_inds
         )
 
     def mark_subtask_skippable(self, ind):
         if(not self.skippable_inds[ind]):
             self.skippable_inds[ind] = True
-            self.eff_span = self._index_eff_span(self.child_exec_ind)
+            self._update_eff_span()
 
     @classmethod
     def new_frame(self, task_exec, child_execs, 
@@ -417,10 +473,16 @@ class Cursor:
         # print()
         # print("-- _advance_parent_frames_to_child -- ")
         curr_frame = self.current_frame
-        for par_frame in reversed(self.stack):
+        for i in range(len(self.stack)-1, -1, -1):
+            par_frame = self.stack[i]
+
+            print("PROG BEF:", par_frame, curr_frame.task_ind)
+            self.stack[i] = par_frame = par_frame.next_frame_after_commit(curr_frame.task_ind, False)
+            print("PROG AFT:", par_frame)
+        # for par_frame in self.stack[::-1]:
             # print("ADV CHILD BEF: ", par_frame)
 
-            self._advance_from_child_commit(par_frame, curr_frame.task_ind, is_in_progress=True)
+            # self._advance_from_child_commit(par_frame, curr_frame.task_ind, is_in_progress=True)
 
             # print("ADV CHILD AFT: ", par_frame)
 
@@ -482,7 +544,8 @@ class Cursor:
             par_frame.subtask_exec_ind = max(c,ind+1)
             ex.status = ExStatus.SUCCESS
 
-        par_frame.eff_span = par_frame._index_eff_span(par_frame.subtask_exec_ind)
+        par_frame._update_eff_span()
+        # par_frame.eff_span = par_frame._index_eff_span(par_frame.subtask_exec_ind)
         par_frame.eff_span_sweep_ind = par_frame.eff_span[0]
 
         print("+ADV:", par_frame, ind, is_in_progress, par_frame.eff_span)
@@ -503,31 +566,34 @@ class Cursor:
 
 
         # self._advance_parent_frames_to_child()
-        curr_frame = self.current_frame
-        # assert(curr_frame.is_operator_frame)
+        # curr_frame = self.current_frame
 
-        # task_ind = curr_frame.task_ind
-        # curr_frame = self._pop_frame()
+        # Beginning with an operator frame, pop up to the parent 
+        assert(self.current_frame.is_operator_frame)
+        task_ind = self.current_frame.task_ind
+        curr_frame = self._pop_frame()
 
         while True:
             # Advance to next subtask exececution in current MethodEx
             
-            print()
+            # print()
             # If the frame is not an operator frame first try advancing the 
             #   current subtask within the current method
-            if(not curr_frame.is_operator_frame):
+            # if(not curr_frame.is_operator_frame):
                 # print("BEF:", curr_frame)
-                if(curr_frame.current_subtask_exec):
-                    curr_frame.current_subtask_exec.status = ExStatus.SUCCESS
-                next_frame = curr_frame.next_subtask_frame()
-                
-                if(next_frame is not None):
-                    print("BEF:", curr_frame)
-                    print("AFT:", next_frame)
-                    if(trace):
-                        trace.add(TraceKind.ADVANCE_SUBTASK, curr_frame, next_frame)
-                    break
+
+
+            # if(curr_frame.current_subtask_exec):
+            #     curr_frame.current_subtask_exec.status = ExStatus.SUCCESS
+            next_frame = curr_frame.next_frame_after_commit(task_ind, True)
             
+            if(next_frame is not None):
+                print("SUC BEF:", curr_frame)
+                print("SUC AFT:", next_frame)
+                if(trace):
+                    trace.add(TraceKind.ADVANCE_SUBTASK, curr_frame, next_frame)
+                break
+        
             # Otherwise try popping frame from stack and mark the current
             #  frame's current child as successful.
             next_frame = self._pop_frame()
@@ -542,12 +608,13 @@ class Cursor:
                 break
 
             # If the popped frame is not None mark the calling task as sucessful
-            self._advance_from_child_commit(next_frame, curr_frame.task_ind,
-                is_in_progress=not curr_frame.is_operator_frame)
-            subtask_execs = next_frame.current_method_exec.subtask_execs
-            subtask_execs[curr_frame.task_ind].status = ExStatus.SUCCESS
+            # self._advance_from_child_commit(next_frame, curr_frame.task_ind,
+            #     is_in_progress=not curr_frame.is_operator_frame)
+            # subtask_execs = next_frame.current_method_exec.subtask_execs
+            # subtask_execs[curr_frame.task_ind].status = ExStatus.SUCCESS
             
             # print("next_frame:", next_frame)
+            task_ind = curr_frame.task_ind
             curr_frame = next_frame
         self.current_frame = next_frame
 
