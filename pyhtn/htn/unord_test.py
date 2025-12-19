@@ -52,6 +52,43 @@ operators = {
     ]
 }
 
+
+
+
+
+
+def setup(domain):
+    env = MagicMock()
+    env.get_state.return_value = [{
+        'id': '1', 
+        'skip_A': True, "skip_B" : False, 
+        'opt_C': True, "opt_D" : False, 
+    }]
+    planner = HtnPlanner2(
+        tasks = [{'name': 'S', 'args': []}],
+        domain = domain,
+        env = env,
+        enable_logging=True
+    )
+    return planner
+
+def plan_next(planner):
+    trace = planner.plan_to_next_operators(multiheaded=True)
+    planner.print_current_frames()
+    print()
+
+def check_next(planner, op_names, nxt_op):
+    operator_execs = planner.get_next_operator_execs()
+    res_op_names = [op_ex.operator.name for op_ex in operator_execs]
+    assert res_op_names == op_names, f"{res_op_names} != {op_names}"
+    planner.apply(operator_execs[op_names.index(nxt_op)])
+    return operator_execs
+
+def check_exhausted(planner):
+    assert planner.is_exhausted()
+    planner.print_current_frames()
+
+
 domain0 = {
     **operators,
 
@@ -74,6 +111,14 @@ domain0 = {
     ],
 }
 
+def test_basic_unord_skip():
+    print("--------------")
+    planner = setup(domain0)
+    plan_next(planner)
+    check_next(planner, ['a', 'b', 'c', 'd', 'e', 'f'], 'd')
+    plan_next(planner)
+    check_next(planner, ['b', 'c', 'e', 'f'], 'f')
+    plan_next(planner)
 
 domain1 = {
     #  ----  OPERATORS -------    
@@ -126,55 +171,11 @@ domain1 = {
     "B" : [
         Method('B', subtasks=[Task('x'), Task('y', optional=True)]),
         Method('B',subtasks=[]),
-    ],
-    
+    ],   
 }
 
-
-def setup(domain):
-    env = MagicMock()
-    env.get_state.return_value = [{'id': '1', 'type': 'location', 'name': 'kitchen'}]
-    planner = HtnPlanner2(
-        tasks = [{'name': 'S', 'args': []}],
-        domain = domain,
-        env = env,
-        enable_logging=True
-    )
-    return planner
-
-def test_plan():
-    planner = setup(domain1)
-    trace = planner.plan(multiheaded=True)
-    trace.print_trace()
-
-
-def plan_next(planner):
-    trace = planner.plan_to_next_operators(multiheaded=True)
-    planner.print_current_frames()
-    print()
-
-def check_next(planner, op_names, nxt_op):
-    operator_execs = planner.get_next_operator_execs()
-    res_op_names = [op_ex.operator.name for op_ex in operator_execs]
-    assert res_op_names == op_names, f"{res_op_names} != {op_names}"
-    planner.apply(operator_execs[op_names.index(nxt_op)])
-    return operator_execs
-
-def check_exhausted(planner):
-    assert planner.is_exhausted()
-    planner.print_current_frames()
-
-
-def test_plan_to_operators():
-    planner = setup(domain0)
-    plan_next(planner)
-    check_next(planner, ['a', 'b', 'c', 'd', 'e', 'f'], 'd')
-    plan_next(planner)
-    check_next(planner, ['b', 'c', 'e', 'f'], 'f')
-    plan_next(planner)
-
-    # return
-
+def test_heir_unord_skip():
+    print("--------------")
     planner = setup(domain1)
     plan_next(planner)
     check_next(planner, ['a', 'b', 'x', 'c', 'd', 'e'], 'b')
@@ -192,6 +193,63 @@ def test_plan_to_operators():
     check_next(planner, ['e', 'f', 'g'], 'f')
     plan_next(planner)
     check_next(planner, ['g'], 'g')
+    check_exhausted(planner)
+
+
+
+domain2 = {
+    #  ----  OPERATORS -------    
+    **operators,
+
+    # ----- METHODS ----------
+    
+
+    "S" : [
+        Method('S',
+            subtasks=[
+                Task("A"),
+                Task('B'),
+                Task('C'),
+                Task('D'),
+                Task('e'),
+            ],
+        )
+    ],
+    "A" : [
+        Method('A', preconditions=[Fact(skip_A=False)], 
+            subtasks=[Task('a')]),
+        Method('A', preconditions=[Fact(skip_A=True)],
+            subtasks=[]),
+    ],
+    "B" : [
+        Method('B', preconditions=[Fact(skip_B=False)], 
+            subtasks=[Task('b')]),
+        Method('B', preconditions=[Fact(skip_B=True)],
+            subtasks=[]),
+    ],
+    "C" : [
+        Method('C', preconditions=[], 
+            subtasks=[Task('c')]),
+        Method('C', preconditions=[Fact(opt_C=True)],
+            subtasks=[]),
+    ],
+    "D" : [
+        Method('D', preconditions=[], 
+            subtasks=[Task('d')]),
+        Method('D', preconditions=[Fact(opt_D=True)],
+            subtasks=[]),
+    ],
+}
+
+def test_conditional_empty_methods():
+    print("--------------")
+    planner = setup(domain2)
+    plan_next(planner)
+    check_next(planner, ['b'], 'b')
+    plan_next(planner)
+    check_next(planner, ['c','d'], 'd')
+    plan_next(planner)
+    check_next(planner, ['e'], 'e')
     check_exhausted(planner)
 
 
@@ -252,7 +310,9 @@ def test_plan_to_operators():
 
 
     
+if __name__ == "__main__":
+    test_basic_unord_skip()
+    test_heir_unord_skip()
+    test_conditional_empty_methods()
 
 
-# test_plan()
-test_plan_to_operators()
