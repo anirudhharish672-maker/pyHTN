@@ -97,29 +97,74 @@ class FrameContext:
         of other subtasks that are reachable within the same
         unordered group, or because subsequent subtasks are optional
         '''
+        # print("> ", self)
+
         ind = self.subtask_exec_ind
         method_exec = self.current_method_exec
         method = method_exec.method
+        subtask_execs = method_exec.subtask_execs
+
         spans = method.unord_spans
+        span_starts = [span[0] for span in method.unord_spans]
+        span_ends =   [span[1] for span in method.unord_spans]
         start, end = ind, ind+(len(method.subtasks) > 0)
         # self.unord_span = (ind, ind+(len(method.subtasks) > 0))
         # print()
         # print(ind, "SPANS", spans)
+        # unord_span = (start, end)
 
-        while(end < len(method.subtasks) and
-              self.skippable_mask[end-1] == True): 
-            end += 1
-
-        for (s,e) in spans:
+        # If the cursor resides in an unorderd span make it the curr_span
+        curr_span = None
+        span_ind = 0
+        for i, (s,e) in enumerate(spans):
+            span_ind = i
             if(s < end and e >= start):
-                if(s < start): start = s
-                if(e > end): end = e
+                curr_span = (s,e)
+                break
+            
+        skippable = lambda i : (self.skippable_mask[i] or 
+                                subtask_execs[i].status in (ExStatus.SUCCESS, ExStatus.FAILED)
+                               )
 
-            # if(ind >= s and ind < e):
-            #     self.unord_span = (s,e)
+        ended_on_unfin_unord = False
+        while(end < len(method.subtasks)):
+            # print("LOOP", start, end)
+            # If ther is a curr_span, i.e. the end currently overlaps 
+            #  with an unord_span, process it at once.
+            if(curr_span is not None):
+                # Extend effective span to the current unord span.
+                s,e = curr_span
+                end = e
 
-        while(start < end and
-              method_exec.subtask_execs[start].status == ExStatus.SUCCESS): 
+                # If there is an unskippable item in this unordered span
+                #  then keep track of this and break.
+                if(any(not skippable(i) for i in range(s,e))):
+                    ended_on_unfin_unord = True
+                    break
+
+                span_ind += 1
+                end += 1
+
+            # If the next item is skippable move the end of the effective
+            #   span past it.
+            elif(skippable(end-1)):
+                end += 1
+
+            # Otherwise stop
+            else:
+                break
+
+            # Update the curr_span if the end now extends into a new
+            #  unordered span
+            curr_span = None
+            if(span_ind < len(spans)):
+                s,e = spans[span_ind]
+                if(s < end and e >= start):
+                    curr_span = (s,e)
+
+        # Advance the start of the effective span past any completed items
+        while(start < end and 
+              subtask_execs[start].status not in (ExStatus.INITIALIZED, ExStatus.EXECUTABLE)):
             start += 1
             
         # print(start, end, len(method.subtasks))
@@ -129,10 +174,18 @@ class FrameContext:
         self.eff_span = (start, end)
 
         child = self.child_execs[self.child_exec_ind] if self.child_exec_ind < len(self.child_execs) else None
-        self.skippables_overflow = (end >= len(child.subtask_execs) and
-                                        (len(child.subtask_execs) == 0 or self.skippable_mask[-1])
-                                       )
+        self.skippables_overflow = (len(child.subtask_execs) == 0 or 
+                                     (end >= len(child.subtask_execs) and
+                                      skippable(end-1) and
+                                      not ended_on_unfin_unord
+                                    ))
+
+        # print("self.skippables_overflow", self.skippables_overflow)
+
         self.is_all_skippable = (end-start) == len(child.subtask_execs)
+
+        # print("< ", self, self.eff_span, self.skippables_overflow)
+        # print()
         # return start, end
 
     def _next_child_exec_index(self):
@@ -348,7 +401,8 @@ class FrameContext:
         task_name = self.task_exec.task.name
         if(not self.is_operator_frame):
             s = ""
-            start, end = self.eff_span
+            start, end = getattr(self, "eff_span", (0,0))
+            eff_span_sweep_ind = getattr(self, "eff_span_sweep_ind", 0)
             method_exec = self.current_method_exec
             unord_spans = method_exec.method.unord_spans
             unord_span_starts = [s[0] for s in unord_spans]
@@ -360,7 +414,7 @@ class FrameContext:
                 if(i == start): in_eff_span = True
                 if(i == end): in_eff_span = False
 
-                if(i == self.eff_span_sweep_ind):
+                if(i == eff_span_sweep_ind):
                     s += "`"
                 if(i == self.subtask_exec_ind):
                     s += "|"
@@ -392,7 +446,7 @@ class FrameContext:
                 if(i+1 in unord_span_ends):
                     s += "\033[24m" # End Underline
 
-                next_caret = i+1 == self.eff_span_sweep_ind or i+1 == self.subtask_exec_ind
+                next_caret = i+1 == eff_span_sweep_ind or i+1 == self.subtask_exec_ind
                 if(i != len(subtask_execs)-1 and not next_caret):
                     s += " "
 
@@ -471,6 +525,7 @@ class Cursor:
     def has_unswept_parent(self):
         if(len(self.stack) > 0):
             par_frame = self.stack[-1]
+            # print("::", par_frame.eff_span_sweep_ind, par_frame.eff_span)
             if(par_frame.eff_span_sweep_ind == par_frame.eff_span[0]):
                 return True
         return False
@@ -1204,7 +1259,7 @@ class HtnPlanner2:
                             new_cursor = cursor.copy()
                             new_cursor.push_task_exec(task_exec, task_ind, [child_exec], trace=cursor.trace)
                             child_exec.cursor = new_cursor
-                            # print("<<", child_exec, child_exec.cursor)
+                            # print("      >", child_exec.cursor)
 
                             if isinstance(child_exec, MethodEx):
                                 # If ever expand method, push this cursor to the stack so 
@@ -1244,6 +1299,7 @@ class HtnPlanner2:
                         if(cursor.has_unswept_parent()):
                             par_cursor = cursor.copy()
                             par_cursor._pop_frame()
+                            # print("   UNSWEPT PARENT", cursor, par_cursor)
                             new_cursors = [par_cursor] + new_cursors
 
 

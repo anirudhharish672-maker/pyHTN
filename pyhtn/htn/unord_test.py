@@ -173,7 +173,7 @@ def test_plan_to_operators():
     check_next(planner, ['b', 'c', 'e', 'f'], 'f')
     plan_next(planner)
 
-    return
+    # return
 
     planner = setup(domain1)
     plan_next(planner)
@@ -189,8 +189,11 @@ def test_plan_to_operators():
     plan_next(planner)
     check_next(planner, ['c', 'e'], 'c')
     plan_next(planner)
-    check_next(planner, ['e', 'f'], 'f')
+    check_next(planner, ['e', 'f', 'g'], 'f')
+    plan_next(planner)
+    check_next(planner, ['g'], 'g')
     check_exhausted(planner)
+
 
     # trace = planner.plan_to_next_operators(multiheaded=True)
     # print("------------")
