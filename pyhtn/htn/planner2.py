@@ -57,7 +57,7 @@ class FrameContext:
     #  for some reason we don't go through them in order
     visted_subtask_exec_inds : List[int]
 
-    skippable_inds : List[bool]
+    skippable_mask : List[bool]
     eff_span_sweep_ind : int
 
     is_operator_frame : bool
@@ -80,15 +80,15 @@ class FrameContext:
 
         self.skippables_overflow = False
         if(not self.is_operator_frame):
-            self.skippable_inds = [t.task.optional for t in child.subtask_execs]
+            self.skippable_mask = [t.task.optional for t in child.subtask_execs]
             self._update_eff_span()
             s,e =  self.eff_span
             self.eff_span_sweep_ind = s
-            self.skippables_overflow = e >= len(child.subtask_execs)
-            self.is_all_skippable = (e-s) == len(child.subtask_execs)
         else:
             self.eff_span = None
             # self.unord_span = None
+
+        # print("MAKE FRAME", self, (self.eff_span), self.skippables_overflow)
     
 
     def _update_eff_span(self):
@@ -107,7 +107,7 @@ class FrameContext:
         # print(ind, "SPANS", spans)
 
         while(end < len(method.subtasks) and
-              self.skippable_inds[end-1] == True): 
+              self.skippable_mask[end-1] == True): 
             end += 1
 
         for (s,e) in spans:
@@ -127,6 +127,12 @@ class FrameContext:
         # prnt = lambda x : x.name + ("*" if x.optional else "")
         # print(start, end, ", ".join([prnt(x) for x in sbtsks]))
         self.eff_span = (start, end)
+
+        child = self.child_execs[self.child_exec_ind] if self.child_exec_ind < len(self.child_execs) else None
+        self.skippables_overflow = (end >= len(child.subtask_execs) and
+                                        (len(child.subtask_execs) == 0 or self.skippable_mask[-1])
+                                       )
+        self.is_all_skippable = (end-start) == len(child.subtask_execs)
         # return start, end
 
     def _next_child_exec_index(self):
@@ -190,13 +196,11 @@ class FrameContext:
         # Find the unordered span that `ind` is in
         unord_spans = self.current_method_exec.method.unord_spans
         us,ue = ind, ind+1
-        print(ind, unord_spans)
         for _us, _ue in unord_spans:
             if(ind >= _us and ind < _ue):
                 us,ue = _us, _ue
                 break
 
-        print("us,ue", us,ue)
 
         # Any not yet executed items before the start of the unordered
         # span covered by 'ind' are skipped
@@ -245,12 +249,12 @@ class FrameContext:
             visted_subtask_exec_inds = visited_inds
         )
 
-    def mark_subtask_skippable(self, ind):
-        if(not self.skippable_inds[ind]):
-            print("BEF MARK", self.eff_span)
-            self.skippable_inds[ind] = True
+    def mark_subtask_skippable(self, ind, skippable=True):
+        if(not self.skippable_mask[ind]):
+            # print("BEF MARK", self.eff_span)
+            self.skippable_mask[ind] = skippable
             self._update_eff_span()
-            print("MARK SKIPPABLE", ind, self.eff_span)
+            # print("MARK SKIPPABLE", ind, self.eff_span)
 
     @classmethod
     def new_frame(self, task_exec, child_execs, 
@@ -698,11 +702,20 @@ class Cursor:
             self.current_frame = next_frame
         return True
 
-    def mark_parent_skippable(self):
+    def mark_parent_skippable(self, skippable=True):
         if(len(self.stack) > 0):
             curr_frame = self.current_frame
-            par_frame = self.stack[-1]
-            par_frame.mark_subtask_skippable(curr_frame.task_ind)
+
+            # print("curr_frame", curr_frame)
+            for par_frame in reversed(self.stack):
+                
+                did_skip_overflow = par_frame.skippables_overflow
+                par_frame.mark_subtask_skippable(curr_frame.task_ind, skippable)
+                # print("par_frame", par_frame, par_frame.skippables_overflow)
+                if(not par_frame.skippables_overflow or did_skip_overflow):
+                    # print("BREAK")
+                    break
+                curr_frame = par_frame
 
 
     def branch_skip_overflow(self):
@@ -1094,7 +1107,6 @@ class HtnPlanner2:
                 cursor.push_nomatch_frame(task_exec, task_ind, child_execs, trace=self.trace)
                 return None, TraceKind.FIRST_SUBTASK
             else:
-                
                 backtrack_kind = (
                     TraceKind.BACKTRACK_NO_CHILDREN,
                     TraceKind.BACKTRACK_NO_MATCH
@@ -1130,13 +1142,7 @@ class HtnPlanner2:
         """
         self._plan_start()
 
-        # c = 0
         while True:
-            # c += 1
-            # if(c >= 8):
-            #     break
-            # print()
-            
             if(all(cursor.is_at_end() for cursor in self.cursors)):
                 # If all cursors exhausted, create a new cursor by popping off a new root task
                 if(not self.root_task_queue.is_empty()):
@@ -1148,8 +1154,8 @@ class HtnPlanner2:
                     self.trace.add(TraceKind.ROOT_TASKS_EXHAUSTED)
                     return self.trace
 
-            print()
-            print("LOOP START:", self.cursors)
+            # print()
+            # print("LOOP START:", self.cursors)
             # print("-------------------")
 
             # Plan all cursors down to their next stop point 
@@ -1162,7 +1168,7 @@ class HtnPlanner2:
                 cursor = cursors.pop()
                 new_cursors = [] if multiheaded else [cursor]
 
-                print("CURSOR:", cursor)
+                # print("CURSOR:", cursor)
                     
                 # If the current cursor is pointing at an operator exec, save it
                 #  for later to be part of the conflict set
@@ -1185,19 +1191,14 @@ class HtnPlanner2:
                         # Skip any task_execs that are already SUCESS, FAIL, or IN_PROGRESS
                         if(task_exec.status != ExStatus.INITIALIZED):
                             continue
-                    # for task_ind, task_exec in cursor.get_cand_next_subtask_execs():
-                        # print(">>", task_exec)
+
+                        # print("<<", task_exec)
                         child_execs, trace_kind = self._expand_taskex(task_exec, task_ind, cursor, push_nomatch_frame)
 
                         if(child_execs is None): continue
                         
                         # did_expand_method = False;
                         for child_exec in child_execs:
-                            # if(isinstance(child_exec, MethodEx)):
-                            #     print("--", child_exec, child_exec.subtask_execs)
-                            # else:
-                            #     print("--", child_exec)
-                            
                             new_cursor = cursor.copy()
                             new_cursor.push_task_exec(task_exec, task_ind, [child_exec], trace=cursor.trace)
                             child_exec.cursor = new_cursor
@@ -1227,10 +1228,12 @@ class HtnPlanner2:
                         if(did_expand_method): break;
 
                     # If the skippable items in this cursor overflow past its end
-                    print("       ", cursor, cursor.skippables_overflow)
+                    # print("       ", cursor, cursor.skippables_overflow)
                     if(cursor.skippables_overflow):
                         # Then mark the parent as skippable
-                        cursor.mark_parent_skippable()
+                        cursor.mark_parent_skippable(True)
+
+                        # print("DOES OVERFLOW" , cursor.has_unswept_parent())
 
                         # Additionally, if this cursor was not generated via a descent 
                         #  because it is the starting cursor for the cycle or generated
@@ -1240,6 +1243,7 @@ class HtnPlanner2:
                             par_cursor = cursor.copy()
                             par_cursor._pop_frame()
                             new_cursors = [par_cursor] + new_cursors
+
 
                     # If ever expanded method, while going through this frame prepend 
                     #   it to stack so can resume after descending into its children
@@ -1263,7 +1267,7 @@ class HtnPlanner2:
                 cursors += new_cursors
                 
             
-            print("HALT CURSORS:", [c.current_frame.current_operator_exec.operator.name for c in halted_cursors])
+            # print("HALT CURSORS:", [c.current_frame.current_operator_exec.operator.name for c in halted_cursors])
             # print("HALT CURSORS:", len(halted_cursors))
 
             if(len(halted_cursors) > 0):
@@ -1357,9 +1361,9 @@ class HtnPlanner2:
     def apply(self, operator_exec, cursor=None):
         if(cursor is None):
             cursor = self._recover_cursor(operator_exec)
-        print()
-        print()
-        print("-- APPLY:", operator_exec, " --")
+        # print()
+        # print()
+        # print("-- APPLY:", operator_exec, " --")
 
         self.trace.add(TraceKind.APPLY_OPERATOR, operator_exec)
         if(cursor.current_frame):
