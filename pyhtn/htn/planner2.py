@@ -389,6 +389,9 @@ class FrameContext:
                 s += ex.task.name
                 if(ex.task.optional): s += "*"
 
+                if(i+1 in unord_span_ends):
+                    s += "\033[24m" # End Underline
+
                 next_caret = i+1 == self.eff_span_sweep_ind or i+1 == self.subtask_exec_ind
                 if(i != len(subtask_execs)-1 and not next_caret):
                     s += " "
@@ -396,8 +399,7 @@ class FrameContext:
                 s += "\033[39m" # End Color
                 s += "\033[22m" # End Bold
 
-                if(i+1 in unord_span_ends):
-                    s += "\033[24m" # End Underline
+                
                 # if(i == end):
                 #     in_eff_span = False
                 #     s += "\033[39m" # End Green
