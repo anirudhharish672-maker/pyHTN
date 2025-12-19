@@ -108,10 +108,6 @@ class FrameContext:
         span_starts = [span[0] for span in method.unord_spans]
         span_ends =   [span[1] for span in method.unord_spans]
         start, end = ind, ind+(len(method.subtasks) > 0)
-        # self.unord_span = (ind, ind+(len(method.subtasks) > 0))
-        # print()
-        # print(ind, "SPANS", spans)
-        # unord_span = (start, end)
 
         # If the cursor resides in an unorderd span make it the curr_span
         curr_span = None
@@ -128,7 +124,6 @@ class FrameContext:
 
         ended_on_unfin_unord = False
         while(end < len(method.subtasks)):
-            # print("LOOP", start, end)
             # If ther is a curr_span, i.e. the end currently overlaps 
             #  with an unord_span, process it at once.
             if(curr_span is not None):
@@ -140,6 +135,10 @@ class FrameContext:
                 #  then keep track of this and break.
                 if(any(not skippable(i) for i in range(s,e))):
                     ended_on_unfin_unord = True
+                    break
+
+                # Don't advance past the end
+                if(end >= len(method.subtasks)):
                     break
 
                 span_ind += 1
@@ -167,10 +166,6 @@ class FrameContext:
               subtask_execs[start].status not in (ExStatus.INITIALIZED, ExStatus.EXECUTABLE)):
             start += 1
             
-        # print(start, end, len(method.subtasks))
-        # sbtsks = [method.subtasks[i] for i in range(start, end)]
-        # prnt = lambda x : x.name + ("*" if x.optional else "")
-        # print(start, end, ", ".join([prnt(x) for x in sbtsks]))
         self.eff_span = (start, end)
 
         child = self.child_execs[self.child_exec_ind] if self.child_exec_ind < len(self.child_execs) else None
@@ -185,8 +180,6 @@ class FrameContext:
         self.is_all_skippable = (end-start) == len(child.subtask_execs)
 
         # print("< ", self, self.eff_span, self.skippables_overflow)
-        # print()
-        # return start, end
 
     def _next_child_exec_index(self):
         # TODO : Might consider policies other than trying MethodExs sequentially  
@@ -211,35 +204,6 @@ class FrameContext:
             visted_subtask_exec_inds = [],
         )
 
-
-    # def _next_subtask_exec_ind(self, visited_inds):
-    #     ind = self.subtask_exec_ind
-    #     nxt = ind + 1
-
-    #     method_exec = self.current_method_exec
-    #     method = method_exec.method
-    #     unord_spans = method.unord_spans
-    #     for s,e in unord_spans:
-    #         if(ind >= s and ind < e):
-    #             for i in range(s,e):
-    #                 if(i not in visited_inds):
-    #                     nxt = i
-    #                     break
-    #             break
-
-    #     # s,e = self.eff_span
-    #     # for i in range(s,e+1):
-    #     #     if(i not in visited_inds):
-    #     #         nxt = i
-    #     #         break
-                    
-    #     # nxt = self.subtask_exec_ind + 1 
-    #     subtask_execs = self.current_method_exec.subtask_execs
-    #     if(nxt >= len(subtask_execs)):
-    #         return None
-
-    #     # self._index_eff_span(nxt)
-    #     return nxt
 
     def next_frame_after_commit(self, ind, is_success=False):
         subtask_execs = self.current_method_exec.subtask_execs

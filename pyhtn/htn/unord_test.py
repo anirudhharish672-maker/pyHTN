@@ -223,7 +223,7 @@ domain2 = {
     ],
     "B" : [
         Method('B', preconditions=[Fact(skip_B=False)], 
-            subtasks=[Task('b')]),
+            subtasks=Unord(Task('z',optional=True), Task('b'))),
         Method('B', preconditions=[Fact(skip_B=True)],
             subtasks=[]),
     ],
@@ -245,9 +245,9 @@ def test_conditional_empty_methods():
     print("--------------")
     planner = setup(domain2)
     plan_next(planner)
-    check_next(planner, ['b'], 'b')
+    check_next(planner, ['z','b'], 'b')
     plan_next(planner)
-    check_next(planner, ['c','d'], 'd')
+    check_next(planner, ['z', 'c','d'], 'd')
     plan_next(planner)
     check_next(planner, ['e'], 'e')
     check_exhausted(planner)

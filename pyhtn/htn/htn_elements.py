@@ -209,7 +209,7 @@ class Method(HTN_Element, MatchableMixin):
                  name: str,
                  *_args : Var, # Positional 
                  args: Sequence[Union[Var, Any]] = (),
-                 subtasks: Sequence[Union[Task, tuple]] = [],
+                 subtasks: Union[Sequence[Union[Task, tuple, Unord]],Unord] = [],
                  preconditions=None,
                  cost=1.0) -> None:
 
@@ -218,6 +218,9 @@ class Method(HTN_Element, MatchableMixin):
 
         super().__init__(name, args, cost)
         self.id = f"M_{rand_uid()}"
+
+        if(isinstance(subtasks, Unord)):
+            subtasks = [subtasks]
 
         _subtasks = []
         _unord_spans = []
