@@ -510,89 +510,13 @@ class Cursor:
         return self.current_frame
 
     def _advance_parent_frames_to_child(self):
-
-        # print()
-        # print("-- _advance_parent_frames_to_child -- ")
         curr_frame = self.current_frame
         for i in range(len(self.stack)-1, -1, -1):
             par_frame = self.stack[i]
 
-            # print("PROG BEF:", par_frame, curr_frame.task_ind)
             self.stack[i] = par_frame = par_frame.next_frame_after_commit(curr_frame.task_ind, False)
-            # print("PROG AFT:", par_frame)
-        # for par_frame in self.stack[::-1]:
-            # print("ADV CHILD BEF: ", par_frame)
-
-            # self._advance_from_child_commit(par_frame, curr_frame.task_ind, is_in_progress=True)
-
-            # print("ADV CHILD AFT: ", par_frame)
-
-            # # Mark any skipped frames as skipped
-            # subtask_execs = par_frame.current_method_exec.subtask_execs
-            # s,e = par_frame.eff_span
-            # c = curr_frame.task_ind
-
-            # for i in range(s, c):
-            #     ex = subtask_execs[i]
-            #     if(ex.status == ExStatus.EXECUTABLE):
-            #         ex.status = ExStatus.SKIPPED
-
-            #     # print("SKIP", i, ex, ex.status)
-
-            # par_frame.eff_span = (max(s,c), e)
-
-            # # Advance the parent's subtask to the child that was committed to
-            # par_frame.subtask_exec_ind = c
-            # ex = subtask_execs[curr_frame.task_ind]
-            # ex.status = ExStatus.IN_PROGRESS
-
 
             curr_frame = par_frame
-
-            # print(par_frame)
-
-    # def _advance_from_child_commit(self, par_frame, ind, is_in_progress : bool):
-    #     subtask_execs = par_frame.current_method_exec.subtask_execs
-    #     s,e = par_frame.eff_span
-    #     c = ind
-
-    #     print("-ADV:", par_frame, ind, is_in_progress, par_frame.eff_span)
-
-    #     # Any not yet executed items before 'ind' were skipped
-    #     for i in range(s, c):
-    #         ex = subtask_execs[i]
-    #         if(ex.status == ExStatus.EXECUTABLE):
-    #             ex.status = ExStatus.SKIPPED
-
-    #     # Any not yet executed items after 'ind' need to be
-    #     #   rechecked for executability so they are reduced to INITIALIZED
-    #     for i in range(c+1, e):
-    #         ex = subtask_execs[i]
-    #         if(ex.status == ExStatus.EXECUTABLE):
-    #             ex.status = ExStatus.INITIALIZED
-
-    #         # print("SKIP", i, ex, ex.status)
-
-    #     # par_frame.eff_span = (max(s,c), e)
-    #     # par_frame.eff_span_sweep_ind = par_frame.eff_span[0]
-
-    #     # Advance the parent's subtask to the child that was committed to
-    #     ex = subtask_execs[ind]
-    #     if(is_in_progress):
-    #         par_frame.subtask_exec_ind = c
-    #         ex.status = ExStatus.IN_PROGRESS
-    #     else:
-    #         par_frame.subtask_exec_ind = max(c,ind+1)
-    #         ex.status = ExStatus.SUCCESS
-
-    #     par_frame._update_eff_span()
-    #     # par_frame.eff_span = par_frame._index_eff_span(par_frame.subtask_exec_ind)
-    #     par_frame.eff_span_sweep_ind = par_frame.eff_span[0]
-
-    #     print("+ADV:", par_frame, ind, is_in_progress, par_frame.eff_span)
-
-
-
 
     def advance_subtask(self, trace=None):
         ''' Try to move the cursor to the next position by: 
