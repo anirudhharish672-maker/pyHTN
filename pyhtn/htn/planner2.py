@@ -1181,7 +1181,7 @@ class HtnPlanner2:
                             new_cursor = cursor.copy()
                             new_cursor.push_task_exec(self.state, task_exec, task_ind, [child_exec], trace=cursor.trace)
                             child_exec.cursor = new_cursor
-                            print("      >", child_exec.cursor)
+                            # print("      >", child_exec.cursor)
 
                             if isinstance(child_exec, MethodEx):
                                 # If ever expand method, push this cursor to the stack so 

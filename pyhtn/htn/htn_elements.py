@@ -183,6 +183,8 @@ class Task(HTN_Element, MatchableMixin):
         self.optional_if = optional_if
         self.skip_if = skip_if
         self.block_if = block_if
+        if(block_if):
+            raise NotImplementedError("'block_if' annotation not implemented yet.")
 
     def as_task_exec(self, state):
         '''Create a task execution from a task by taking its

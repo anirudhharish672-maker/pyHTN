@@ -112,6 +112,8 @@ def test_basic_unord_skip():
     plan_next(planner)
     check_next(planner, ['b', 'c', 'e', 'f'], 'f')
     plan_next(planner)
+    check_next(planner, ['e', 'g'], 'g')
+    check_exhausted(planner)
 
 domain1 = {
     #  ----  OPERATORS -------    

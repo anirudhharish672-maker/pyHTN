@@ -198,22 +198,14 @@ class TaskEx(ElementExecution):
         if(methods_or_op is None):
             return None
 
-        print()
-        # print(domain)
-
         if(not isinstance(methods_or_op, list)):
             methods_or_op = [methods_or_op]
 
-        # print("methods_or_op:", methods_or_op)
-
         child_execs = []
         for m_or_op in methods_or_op:
-            print("m_or_op", m_or_op)
-            # match_substs = m_or_op.get_match_substitutions(self, state, index)
             child_execs += m_or_op.get_match_executions(self, state)
 
         self.child_execs = child_execs
-        print("CHILD", [ex.element for ex in child_execs])
         return child_execs
 
     def check_can_execute_skip(self, state):
