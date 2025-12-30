@@ -54,16 +54,9 @@ operators = {
 
 
 
-
-
-
-def setup(domain):
+def setup(domain, state=[{"id" : "1"}]):
     env = MagicMock()
-    env.get_state.return_value = [{
-        'id': '1', 
-        'skip_A': True, "skip_B" : False, 
-        'opt_C': True, "opt_D" : False, 
-    }]
+    env.get_state.return_value = state
     planner = HtnPlanner2(
         tasks = [{'name': 'S', 'args': []}],
         domain = domain,
@@ -243,7 +236,12 @@ domain2 = {
 
 def test_conditional_empty_methods():
     print("--------------")
-    planner = setup(domain2)
+    state = [{
+        'id': '1', 
+        'skip_A': True, "skip_B" : False, 
+        'opt_C': True, "opt_D" : False, 
+    }]
+    planner = setup(domain2, state)
     plan_next(planner)
     check_next(planner, ['z','b'], 'b')
     plan_next(planner)
@@ -253,59 +251,102 @@ def test_conditional_empty_methods():
     check_exhausted(planner)
 
 
-    # trace = planner.plan_to_next_operators(multiheaded=True)
-    # print("------------")
-    # planner.print_current_frames()
-    # # trace.print_trace()
-    # operator_execs = planner.get_next_operator_execs()
-    # print([op_ex.operator.name for op_ex in operator_execs])
+domain3 = {
+    #  ----  OPERATORS -------    
+    **operators,
 
-    # planner.apply(operator_execs[1])
+    # ----- METHODS ----------
+    "S" : [
+        Method('S',
+            subtasks=[
+                Task('a', optional_if=[Fact(opt_a=True)]),
+                Task('b', optional_if=[Fact(opt_b=True)]),
+                Task('D'),
+                Task('e'),
+                Task('F', optional_if=[Fact(opt_F=True)]),
+                Task('g'),
+            ],
+        )
+    ],
+    "D" : [
+        Method('D', subtasks=[
+                    Task('x', optional_if=[Fact(opt_x=True)]),
+                    Task('y', optional_if=[Fact(opt_y=True)])
+        ]),
+        Method('D', subtasks=[Task('z')]),
+    ],
+    "F" : [
+        Method('F', subtasks=[Task('f')])
+    ]
+}
 
-    # trace = planner.plan_to_next_operators(multiheaded=True)
-    # print("------------")
-    # planner.print_current_frames()
-    # # trace.print_trace()
-    # operator_execs = planner.get_next_operator_execs()
-    # print([op_ex.operator.name for op_ex in operator_execs])
+def test_optional_if():
+    state = [{
+        'id' : "1",
+        'opt_a': True, "opt_b" : False, 
+        'opt_F': True, 
+        "opt_x" : False, "opt_y" : True, 
+    }]
+    planner = setup(domain3, state)
+    plan_next(planner)
+    check_next(planner, ['a','b'], 'b')
+    plan_next(planner)
+    check_next(planner, ['z', 'x'], 'x') # TODO: out of order
+    plan_next(planner)
+    check_next(planner, ['y', 'e'], 'e')
+    plan_next(planner)
+    check_next(planner, ['f', 'g'], 'f')
+    plan_next(planner)
+    check_next(planner, ['g'], 'g')
+    check_exhausted(planner)
 
-    # planner.apply(operator_execs[0])
 
-    # trace = planner.plan_to_next_operators(multiheaded=True)
-    # print("------------")
-    # planner.print_current_frames()
-    # # trace.print_trace()
-    # operator_execs = planner.get_next_operator_execs()
-    # print([op_ex.operator.name for op_ex in operator_execs])
+domain4 = {
+    #  ----  OPERATORS -------    
+    **operators,
 
-    # planner.apply(operator_execs[1])
+    # ----- METHODS ----------
+    "S" : [
+        Method('S',
+            subtasks=[
+                Task('a', skip_if=[Fact(skip_a=True)]),
+                Task('b', skip_if=[Fact(skip_b=True)]),
+                Task('D'),
+                Task('e'),
+                Task('F', skip_if=[Fact(skip_F=True)]),
+                Task('g'),
+            ],
+        )
+    ],
+    "D" : [
+        Method('D', subtasks=[
+                    Task('x', skip_if=[Fact(skip_x=True)]),
+                    Task('y', skip_if=[Fact(skip_y=True)])
+        ]),
+        Method('D', subtasks=[Task('z')]),
+    ],
+    "F" : [
+        Method('F', subtasks=[Task('f')])
+    ]
+}
 
-    # trace = planner.plan_to_next_operators(multiheaded=True)
-    # print("------------")
-    # planner.print_current_frames()
-    # # trace.print_trace()
-    # operator_execs = planner.get_next_operator_execs()
-    # print([op_ex.operator.name for op_ex in operator_execs])
-
-    # planner.apply(operator_execs[0])
-
-    # trace = planner.plan_to_next_operators(multiheaded=True)
-    # print("------------")
-    # planner.print_current_frames()
-    # # trace.print_trace()
-    # operator_execs = planner.get_next_operator_execs()
-    # print([op_ex.operator.name for op_ex in operator_execs])
-
-    # planner.apply(operator_execs[1])
-
-    # planner.print_current_frames()
-
-    # trace = planner.plan_to_next_operators(multiheaded=True)
-    # print("------------")
-    # planner.print_current_frames()
-    # # trace.print_trace()
-    # operator_execs = planner.get_next_operator_execs()
-    # print([op_ex.operator.name for op_ex in operator_execs])
+def test_skip_if():
+    state = [{
+        'id' : "1",
+        'skip_a': True, "skip_b" : False, 
+        'skip_F': True, 
+        "skip_x" : False, "skip_y" : True, 
+    }]
+    planner = setup(domain4, state)
+    plan_next(planner)
+    check_next(planner, ['b'], 'b')
+    plan_next(planner)
+    check_next(planner, ['z', 'x'], 'x') # TODO: out of order
+    plan_next(planner)
+    check_next(planner, ['e'], 'e')
+    plan_next(planner)
+    check_next(planner, ['g'], 'g')
+    check_exhausted(planner)
 
 
 
@@ -314,5 +355,7 @@ if __name__ == "__main__":
     test_basic_unord_skip()
     test_heir_unord_skip()
     test_conditional_empty_methods()
+    test_optional_if()
+    test_skip_if()
 
 

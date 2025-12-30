@@ -21,14 +21,16 @@ class TraceKind(Enum):
 
     POP_FRAME :               "TraceKind" = 11
 
-    BACKTRACK_NO_CHILDREN :   "TraceKind" = 12
-    BACKTRACK_NO_MATCH :      "TraceKind" = 13  
-    BACKTRACK_OPERATOR_FAIL : "TraceKind" = 14   
-    BACKTRACK_CHILD_CASCADE : "TraceKind" = 15
 
-    ENTER_NOMATCH_FRAME :     "TraceKind" = 16
+    OPERATOR_FAIL :           "TraceKind" = 12
+    BACKTRACK_NO_CHILDREN :   "TraceKind" = 13
+    BACKTRACK_NO_MATCH :      "TraceKind" = 14  
+    BACKTRACK_OPERATOR_FAIL : "TraceKind" = 15   
+    BACKTRACK_CHILD_CASCADE : "TraceKind" = 16
 
-    ROOT_TASKS_EXHAUSTED :    "TraceKind" = 17
+    ENTER_NOMATCH_FRAME :     "TraceKind" = 17
+
+    ROOT_TASKS_EXHAUSTED :    "TraceKind" = 18
 
 
 

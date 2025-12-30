@@ -50,7 +50,7 @@ class HTN_Element(ABC):
         return self.id == other.id
 
 class MatchableMixin(ABC):
-    def _get_match_substitutions(self, task_exec, state):
+    def _get_match_substitutions(self, task_exec, state, preconditions):
         ptstate = dict_to_tuple(state)
         index = build_index(ptstate)
         substitutions = unify(task_exec.match, self.args)
@@ -60,11 +60,11 @@ class MatchableMixin(ABC):
         # print(task_exec.match, self.args)
 
         # Find the substitutions for each match
-        if(not self.preconditions):
+        if(not preconditions):
             match_substs = [substitutions] 
         else:
             # Danny Question: When would there ever be multiple self.preconditions?
-            ptcondition = fact_to_tuple(self.preconditions, variables=True)[0]
+            ptcondition = fact_to_tuple(preconditions, variables=True)[0]
             match_substs = [x for x in pattern_match(ptcondition, index, substitutions)]
 
         return match_substs
@@ -119,21 +119,21 @@ class Operator(HTN_Element, MatchableMixin):
         if(self.name is not None):
             prefix = f"Operator({self.name!r}"
         else:
-            prefix = f"Operator("
+            prefix = f"Operator(?? "
 
         # print(prefix, self.args)
 
         if(len(self.args) > 0):
             return f"{prefix}, {', '.join([repr(x) for x in self.args])})"
         else:
-            return f"{prefix}{self.name!r})"
+            return f"{prefix})"
 
     __repr__ = __str__
 
     def get_match_executions(self, task_exec, state):
         from pyhtn.htn.element_executions import OperatorEx
 
-        match_substs = self._get_match_substitutions(task_exec, state)
+        match_substs = self._get_match_substitutions(task_exec, state, self.preconditions)
 
         # Make Method exections and Task executions from each match.
         op_execs = []
@@ -154,15 +154,21 @@ class Operator(HTN_Element, MatchableMixin):
 # ------------------------------------------------------
 # : Task
 
-class Task(HTN_Element):
+class Task(HTN_Element, MatchableMixin):
     def __init__(self,
                  name: str,
                  *_args : Union[Var, Any],
                  args: Sequence[Union[Var, Any]] = (),
-                 cost=1.0,
-                 priority='first',
-                 repeat=1,
-                 optional=False):
+                 cost : float = 1.0,
+                 priority : str = 'first',
+                 repeat : int = 1,
+                 optional : bool =False,
+                 optional_if=None,
+                 skip_if=None,
+                 block_if=None):
+
+        if(bool(optional) + bool(optional_if) + bool(skip_if) + bool(block_if) > 1):
+            raise ValueError("Task may only be annotated with at most one of 'optional', 'skip_if', 'optional_if', 'block_if'.")
 
         if(len(args) == 0 and _args):
             args = _args
@@ -174,6 +180,9 @@ class Task(HTN_Element):
         self.priority = priority
         self.repeat = repeat
         self.optional = optional
+        self.optional_if = optional_if
+        self.skip_if = skip_if
+        self.block_if = block_if
 
     def as_task_exec(self, state):
         '''Create a task execution from a task by taking its
@@ -268,7 +277,7 @@ class Method(HTN_Element, MatchableMixin):
 
         from pyhtn.htn.element_executions import MethodEx, TaskEx
 
-        match_substs = self._get_match_substitutions(task_exec, state)
+        match_substs = self._get_match_substitutions(task_exec, state, self.preconditions)
 
         # Make Method exections and Task executions from each match.
         meth_execs = []

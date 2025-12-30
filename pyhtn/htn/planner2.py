@@ -57,14 +57,15 @@ class FrameContext:
     #  for some reason we don't go through them in order
     visted_subtask_exec_inds : List[int]
 
-    skippable_mask : List[bool]
+    can_skip_mask : List[bool]
     eff_span_sweep_ind : int
 
     is_operator_frame : bool
     skippables_overflow : bool
     is_all_skippable : bool
+    state : dict 
 
-    def __init__(self, task_exec, task_ind, child_execs,
+    def __init__(self, state, task_exec, task_ind, child_execs,
                 child_exec_ind, visited_child_exec_inds,
                 subtask_exec_ind, visted_subtask_exec_inds=[]):
         self.task_exec = task_exec
@@ -80,7 +81,14 @@ class FrameContext:
 
         self.skippables_overflow = False
         if(not self.is_operator_frame):
-            self.skippable_mask = [t.task.optional for t in child.subtask_execs]
+            self.can_execute_mask = [True] * len(child.subtask_execs)
+            self.can_skip_mask = [False] * len(child.subtask_execs)
+            for i, t in enumerate(child.subtask_execs):
+                can_execute, can_skip = t.check_can_execute_skip(state)
+                self.can_execute_mask[i] = can_execute
+                self.can_skip_mask[i] = can_skip
+
+            # self.can_skip_mask = [t.task.optional for t in child.subtask_execs]
             self._update_eff_span()
             s,e =  self.eff_span
             self.eff_span_sweep_ind = s
@@ -117,10 +125,11 @@ class FrameContext:
             if(s < end and e >= start):
                 curr_span = (s,e)
                 break
-            
-        skippable = lambda i : (self.skippable_mask[i] or 
+
+        skippable = lambda i : (self.can_skip_mask[i] or 
                                 subtask_execs[i].status in (ExStatus.SUCCESS, ExStatus.FAILED)
                                )
+        blocker = lambda i : (not self.can_execute_mask[i] and not self.can_skip_mask[i])
 
         ended_on_unfin_unord = False
         while(end < len(method.subtasks)):
@@ -178,6 +187,9 @@ class FrameContext:
         # print("self.skippables_overflow", self.skippables_overflow)
 
         self.is_all_skippable = (end-start) == len(child.subtask_execs)
+        self.is_all_blockers = (len(child.subtask_execs) > 0 and 
+                                all(blocker(i) for i in range(start, end))
+                               )
 
         # print("< ", self, self.eff_span, self.skippables_overflow)
 
@@ -188,13 +200,14 @@ class FrameContext:
             return None
         return nxt
 
-    def next_child_frame(self):
+    def next_child_frame(self, state):
         ind = self._next_child_exec_ind()
 
         if(ind is None):
             return None
 
         return FrameContext(
+            state     =                state,
             task_exec =                self.task_exec,
             task_ind =                 self.task_ind,
             child_execs =              self.child_execs,
@@ -205,7 +218,7 @@ class FrameContext:
         )
 
 
-    def next_frame_after_commit(self, ind, is_success=False):
+    def next_frame_after_commit(self, state, ind, is_success=False):
         subtask_execs = self.current_method_exec.subtask_execs
         s,e = self.eff_span
         visited_inds = self.visted_subtask_exec_inds
@@ -257,6 +270,7 @@ class FrameContext:
         visited_inds = self.visted_subtask_exec_inds + [ind]
 
         return FrameContext(
+            state     =                state,
             task_exec =                self.task_exec,
             task_ind =                 self.task_ind,
             child_execs =              self.child_execs,
@@ -267,19 +281,20 @@ class FrameContext:
         )
 
     def mark_subtask_skippable(self, ind, skippable=True):
-        if(not self.skippable_mask[ind]):
+        if(not self.can_skip_mask[ind]):
             # print("BEF MARK", self.eff_span)
-            self.skippable_mask[ind] = skippable
+            self.can_skip_mask[ind] = skippable
             self._update_eff_span()
             # print("MARK SKIPPABLE", ind, self.eff_span)
 
     @classmethod
-    def new_frame(self, task_exec, child_execs, 
+    def new_frame(self, state, task_exec, child_execs, 
                     child_ind=0,
                     task_ind=0,
                     subtask_ind=0):
 
         return FrameContext(
+            state =                    state,
             task_exec =                task_exec,
             task_ind =                 task_ind,
             child_execs =              child_execs,
@@ -509,16 +524,16 @@ class Cursor:
         self.stack.pop()
         return self.current_frame
 
-    def _advance_parent_frames_to_child(self):
+    def _advance_parent_frames_to_child(self, next_state):
         curr_frame = self.current_frame
         for i in range(len(self.stack)-1, -1, -1):
             par_frame = self.stack[i]
 
-            self.stack[i] = par_frame = par_frame.next_frame_after_commit(curr_frame.task_ind, False)
+            self.stack[i] = par_frame = par_frame.next_frame_after_commit(next_state, curr_frame.task_ind, False)
 
             curr_frame = par_frame
 
-    def advance_subtask(self, trace=None):
+    def advance_subtask(self, next_state, trace=None):
         ''' Try to move the cursor to the next position by: 
                 1. Moving it laterally to the next subtask
                 2. Popping up the stack if at last subtask in method
@@ -550,7 +565,7 @@ class Cursor:
 
             # if(curr_frame.current_subtask_exec):
             #     curr_frame.current_subtask_exec.status = ExStatus.SUCCESS
-            next_frame = curr_frame.next_frame_after_commit(task_ind, True)
+            next_frame = curr_frame.next_frame_after_commit(next_state, task_ind, True)
             
             if(next_frame is not None):
                 # print("SUC BEF:", curr_frame)
@@ -572,7 +587,7 @@ class Cursor:
             if(next_frame is None):
                 break
 
-            # If the popped frame is not None mark the calling task as sucessful
+            # If the popped frame is not None mark the calling task as successful
             # self._advance_from_child_commit(next_frame, curr_frame.task_ind,
             #     is_in_progress=not curr_frame.is_operator_frame)
             # subtask_execs = next_frame.current_method_exec.subtask_execs
@@ -585,11 +600,11 @@ class Cursor:
 
         # print("current_frame: ", self.current_frame)
 
-        self._advance_parent_frames_to_child()
+        self._advance_parent_frames_to_child(next_state)
 
         
 
-    def push_task_exec(self, task_exec, task_ind, child_execs, child_ind=0, trace=None):
+    def push_task_exec(self, state, task_exec, task_ind, child_execs, child_ind=0, trace=None):
         ''' Recurse into a new frame from a task execution and
             its list of method executions
         ''' 
@@ -599,7 +614,7 @@ class Cursor:
 
         # Make a new frame pointing at the selected MethodEx
         curr_frame = self.current_frame        
-        next_frame = FrameContext.new_frame(task_exec, child_execs, child_ind, task_ind)
+        next_frame = FrameContext.new_frame(state, task_exec, child_execs, child_ind, task_ind)
         next_frame.current_child_exec.status = ExStatus.IN_PROGRESS
         # if()
         # if(trace):
@@ -609,7 +624,7 @@ class Cursor:
 
 
 
-    def backtrack(self, trace_kind=None, trace=None):
+    def backtrack(self, state, trace_kind=None, trace=None):
         ''' Pop frame off the stack and try the next method execution.
             Keep popping up stack until a method execution is found.
             This is the normal movement of the cursor after failing to 
@@ -634,7 +649,7 @@ class Cursor:
             
             # Try next possible MethodEx
             curr_frame = self.current_frame
-            next_frame = self.current_frame.next_child_frame()
+            next_frame = self.current_frame.next_child_frame(state)
             if(next_frame is not None):
                 if(trace):
                     trace.add(TraceKind.SELECT_METHOD,       curr_frame, next_frame)
@@ -663,34 +678,34 @@ class Cursor:
                 curr_frame = par_frame
 
 
-    def branch_skip_overflow(self):
-        ''' In the event that the effective span of next tasks in this frame
-            overflows past the last task, (i.e. if the last remaining task turns 
-            out to be skippable), make a new branching cursor pointing to a
-            position in the parent frame beyond the parent task.
-        '''
-        curr_frame = self.current_frame
+    # def branch_skip_overflow(self):
+    #     ''' In the event that the effective span of next tasks in this frame
+    #         overflows past the last task, (i.e. if the last remaining task turns 
+    #         out to be skippable), make a new branching cursor pointing to a
+    #         position in the parent frame beyond the parent task.
+    #     '''
+    #     curr_frame = self.current_frame
 
-        # Make a copy
-        cursor = self.copy()
+    #     # Make a copy
+    #     cursor = self.copy()
 
-        # Pop copy's current frame
-        curr_frame = cursor._pop_frame()
+    #     # Pop copy's current frame
+    #     curr_frame = cursor._pop_frame()
 
-        # Pop copy's parent frame
-        par_frame = cursor._pop_frame()
+    #     # Pop copy's parent frame
+    #     par_frame = cursor._pop_frame()
 
-        # Push a new frame with the cursor set beyond 
-        ind = curr_frame.task_ind + 1
-        cursor.stack.push(FrameContext(
-            task_exec =                par_frame.task_exec,
-            task_ind =                 par_frame.task_ind,
-            child_execs =              par_frame.child_execs,
-            child_exec_ind =           par_frame.child_exec_ind, 
-            visited_child_exec_inds =  par_frame.visited_child_exec_inds,
-            subtask_exec_ind =         ind,
-            visted_subtask_exec_inds = par_frame.visted_subtask_exec_inds,
-        ))
+    #     # Push a new frame with the cursor set beyond 
+    #     ind = curr_frame.task_ind + 1
+    #     cursor.stack.push(FrameContext(
+    #         task_exec =                par_frame.task_exec,
+    #         task_ind =                 par_frame.task_ind,
+    #         child_execs =              par_frame.child_execs,
+    #         child_exec_ind =           par_frame.child_exec_ind, 
+    #         visited_child_exec_inds =  par_frame.visited_child_exec_inds,
+    #         subtask_exec_ind =         ind,
+    #         visted_subtask_exec_inds = par_frame.visted_subtask_exec_inds,
+    #     ))
 
         # cursor.current_frame.
 
@@ -701,7 +716,7 @@ class Cursor:
 
 
 
-    def user_select_method_exec(self, method_ind=0, trace=None):
+    def user_select_method_exec(self, state, method_ind=0, trace=None):
         # Make a new frame pointing at the selected MethodEx
         curr_frame = self.current_frame
 
@@ -709,6 +724,7 @@ class Cursor:
             curr_frame.current_method_exec.status = ExStatus.INITIALIZED
 
         next_frame = FrameContext.new_frame(
+            state,
             curr_frame.task_exec,
             curr_frame.child_execs,
             method_ind,
@@ -722,7 +738,7 @@ class Cursor:
 
         self.current_frame = next_frame
 
-    def push_nomatch_frame(self, task_exec, task_ind, method_execs, trace=None):
+    def push_nomatch_frame(self, state, task_exec, task_ind, method_execs, trace=None):
         ''' Recurse into an nomatch frame this is a kind of 
             frame where method_execs is None or []. In normal planning
             this is an invalid frame. When using the planner 
@@ -736,6 +752,7 @@ class Cursor:
             self.stack.append(self.current_frame)
 
         next_frame = FrameContext.new_frame(
+            state,
             task_exec,
             method_execs,
             None)
@@ -1035,7 +1052,6 @@ class HtnPlanner2:
 
     def _expand_taskex(self, task_exec, task_ind, cursor, push_nomatch_frames=False):
         ''' Handle the execution of a TaskEx instance
-            :return: A TaskKind Enum signaling how the execution was carried out
         '''
 
         # Apply pattern matching to find child MethodExs or OperatorEx
@@ -1071,7 +1087,7 @@ class HtnPlanner2:
 
         task_exec = root_task.as_task_exec(self.state)
         child_execs, trace_kind = self._expand_taskex(task_exec, None, cursor, push_nomatch_frame)
-        cursor.push_task_exec(task_exec, None, child_execs, trace=trace)
+        cursor.push_task_exec(self.state, task_exec, None, child_execs, trace=trace)
 
         trace.add(TraceKind.NEW_ROOT_TASK, task_exec)
         if(trace_kind is not None):
@@ -1111,15 +1127,19 @@ class HtnPlanner2:
             while(len(cursors) > 0):
                 # print("CURSORS:", cursors)
                 cursor = cursors.pop()
+                curr_frame = cursor.current_frame
                 new_cursors = [] if multiheaded else [cursor]
 
                 # print("CURSOR:", cursor)
                     
                 # If the current cursor is pointing at an operator exec, save it
-                #  for later to be part of the conflict set
+                #  for later to be part of the conflict set that we present to env
                 if(cursor.is_operator_frame):
                     operator_cursors.append(cursor)
                     continue
+
+                if(curr_frame.is_all_blockers):
+                    raise NotImplementedError("NEED TO HANDLE BACKTRACK??")
 
                 # if(cursor.skippables_overflow):
                 #     cursor.mark_parent_skippable()
@@ -1128,13 +1148,26 @@ class HtnPlanner2:
 
                 
                 if(multiheaded):
-                    # Go through the next subtasks pointed to by the current frame
+                    # Go through the the cursor's effective span: the sequence of next subtasks 
+                    #  that can be executed from the current frame's cursor position, of which
+                    #  there may be several because of optional and skippable subtasks and unordered
+                    #  groups. This loop marks INITIALIZED subtasks as EXECUTABLE to indicate that
+                    #  they are in the current effective span. As subtasks are descended into and 
+                    #  popped out of (e.g. when the iteration process overflows past the end of the subtask
+                    #  sequence), the effective span within each frame (i.e. method level) can widen.
+                    #  For instance, widening can occur when the parent subtask can be skipped because it
+                    #  descends into methods with empty subtask, when all of its subtasks are skippable.
+
                     did_expand_method = False;
                     while((tup := cursor.next_subtask_exec()) is not None):
                         task_ind, task_exec = tup
 
-                        # Skip any task_execs that are already SUCESS, FAIL, or IN_PROGRESS
+                        # Skip any task_execs that are already SUCCESS, FAIL, or IN_PROGRESS
                         if(task_exec.status != ExStatus.INITIALIZED):
+                            continue
+
+                        if(not curr_frame.can_execute_mask[task_ind]):
+                            task_exec.status = ExStatus.SKIPPED
                             continue
 
                         # print("<<", task_exec)
@@ -1143,11 +1176,12 @@ class HtnPlanner2:
                         if(child_execs is None): continue
                         
                         # did_expand_method = False;
+                        # _new_cursors = []
                         for child_exec in child_execs:
                             new_cursor = cursor.copy()
-                            new_cursor.push_task_exec(task_exec, task_ind, [child_exec], trace=cursor.trace)
+                            new_cursor.push_task_exec(self.state, task_exec, task_ind, [child_exec], trace=cursor.trace)
                             child_exec.cursor = new_cursor
-                            # print("      >", child_exec.cursor)
+                            print("      >", child_exec.cursor)
 
                             if isinstance(child_exec, MethodEx):
                                 # If ever expand method, push this cursor to the stack so 
@@ -1161,11 +1195,11 @@ class HtnPlanner2:
                             if(trace_kind in stop_kinds):
                                 halted_cursors.append(new_cursor)
                             else:
-                                # if isinstance(child_exec, MethodEx):
-                                    # If we didn't stop then push the child cursor to the stack
+                                # If we didn't stop then push the child cursor to the stack
                                 new_cursors.append(new_cursor)
-                                # else:
-                                    # operator_cursors.append(new_cursor)
+
+                        # Append in reversed order so sooner popped first
+                        # new_cursors += _new_cursors[::-1]
 
 
                         task_exec.status = ExStatus.EXECUTABLE
@@ -1203,7 +1237,7 @@ class HtnPlanner2:
 
                     if(child_execs is None): continue
                         
-                    trace_kind = cursor.push_task_exec(task_exec, task_ind, [child_exec], trace=cursor.trace)
+                    trace_kind = cursor.push_task_exec(self.state, task_exec, task_ind, [child_exec], trace=cursor.trace)
                     # task_exec.status = ExStatus.IN_PROGRESS
 
                     if(trace_kind in stop_kinds or trace_kind is None):
@@ -1287,10 +1321,9 @@ class HtnPlanner2:
         any_success = False
         for cursor in operator_cursors:
             operator_exec = cursor.current_frame.current_operator_exec
-            success = self._env_try_operator_exec(operator_exec)
+            # success = self._env_try_operator_exec(operator_exec)
+            success = self.apply(operator_exec, cursor)
             if(success):
-                self.apply(operator_exec, cursor)
-                # print("RETURN", cursor)
                 return cursor;
 
         cursor = operator_cursors[0]
@@ -1310,12 +1343,19 @@ class HtnPlanner2:
         # print()
         # print()
         # print("-- APPLY:", operator_exec, " --")
+        success = True
+        if(self.env):
+            success = self.env._env_try_operator_exec(operator_exec)
 
-        self.trace.add(TraceKind.APPLY_OPERATOR, operator_exec)
-        if(cursor.current_frame):
-            cursor.advance_subtask(trace=cursor.trace)
+        if(success):
+            self.trace.add(TraceKind.APPLY_OPERATOR, operator_exec)
+            if(cursor.current_frame):
+                cursor.advance_subtask(self.state, trace=cursor.trace)
 
-        self.cursors = [cursor]
+            self.cursors = [cursor]
+        else:
+            self.trace.add(TraceKind.OPERATOR_FAIL, operator_exec)
+        return success
 
         
         # return TraceKind.APPLY_OPERATOR
@@ -1326,6 +1366,7 @@ class HtnPlanner2:
 
         print("Backtrack:", operator_exec)
         cursor.backtrack(
+            self.state,
             TraceKind.BACKTRACK_OPERATOR_FAIL,
             trace=self.trace
         )

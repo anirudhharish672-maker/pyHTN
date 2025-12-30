@@ -198,16 +198,51 @@ class TaskEx(ElementExecution):
         if(methods_or_op is None):
             return None
 
+        print()
+        # print(domain)
+
         if(not isinstance(methods_or_op, list)):
             methods_or_op = [methods_or_op]
 
+        # print("methods_or_op:", methods_or_op)
+
         child_execs = []
         for m_or_op in methods_or_op:
+            print("m_or_op", m_or_op)
             # match_substs = m_or_op.get_match_substitutions(self, state, index)
             child_execs += m_or_op.get_match_executions(self, state)
 
         self.child_execs = child_execs
+        print("CHILD", [ex.element for ex in child_execs])
         return child_execs
+
+    def check_can_execute_skip(self, state):
+        ''' Evaluate optional, optional_if, skip_if, block_if '''
+
+        # The default: we can execute the subtask, and cannot skip it
+        can_execute = True
+        can_skip = False
+        t = self.task
+
+        # If optional we can skip it
+        if(t.optional):
+            can_skip = True
+
+        # The rest... 
+        elif(preconditions:=t.optional_if or t.skip_if or t.block_if):
+            matches = t._get_match_substitutions(self, state, preconditions)
+            if(len(matches) > 0):
+                if(t.optional_if):
+                    can_skip = True
+                elif(t.skip_if):
+                    can_skip = True
+                    can_execute = False
+                elif(t.block_if):
+                    can_execute = False
+
+        return can_execute, can_skip
+
+
 
     def as_dict(self):
         d = super().as_dict()
