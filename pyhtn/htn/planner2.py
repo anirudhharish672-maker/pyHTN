@@ -188,6 +188,7 @@ class FrameContext:
 
         self.is_all_skippable = (end-start) == len(child.subtask_execs)
         self.is_all_blockers = (len(child.subtask_execs) > 0 and 
+                                end-start > 0 and 
                                 all(blocker(i) for i in range(start, end))
                                )
 
@@ -226,11 +227,12 @@ class FrameContext:
         # Find the unordered span that `ind` is in
         unord_spans = self.current_method_exec.method.unord_spans
         us,ue = ind, ind+1
+        in_unord = False
         for _us, _ue in unord_spans:
             if(ind >= _us and ind < _ue):
                 us,ue = _us, _ue
+                in_unord = True
                 break
-
 
         # Any not yet executed items before the start of the unordered
         # span covered by 'ind' are skipped
@@ -252,16 +254,23 @@ class FrameContext:
         ex = subtask_execs[ind]
         ex.status = ExStatus.SUCCESS if is_success else ExStatus.IN_PROGRESS
 
-        # The next subtask in is before 'ind' if in progress or after
-        #  if success, or before the first unexecuted subtask in the 
-        #  undordered group
+        # The default next subtask is 'ind' if this is an 
+        #  in_progress commit or ind+1 if is success commit
         nxt = ind+1 if is_success else ind
+
+        # But if ind is in an unordered group then it is the first
+        #  unresolved subtask.
+        all_unord_executed = in_unord
         for i in range(us, ue):
             if(subtask_execs[i].status == ExStatus.INITIALIZED):
             # if(i not in visited_inds):
                 nxt = i
+                all_unord_executed = False
                 break;
 
+        # If unordered group all executed, nxt is subtask after it.
+        if(all_unord_executed):
+            nxt = ue
 
         # If `nxt` is beyond the end of the method then return None 
         if(nxt >= len(subtask_execs)):
@@ -413,7 +422,8 @@ class FrameContext:
                     s += "\033[93m" # Start Yellow
                 
                 if(i in unord_span_starts):
-                    s += "\033[4m"  # Start Underline
+                    # s += "\033[4m"  # Start Underline
+                    s += "("  # Start Underline
                 
 
                 if(ex.status == ExStatus.EXECUTABLE):
@@ -423,11 +433,12 @@ class FrameContext:
                 if(ex.task.optional): s += "*"
 
                 if(i+1 in unord_span_ends):
-                    s += "\033[24m" # End Underline
+                    # s += "\033[24m" # End Underline
+                    s += ")"
 
                 next_caret = i+1 == eff_span_sweep_ind or i+1 == self.subtask_exec_ind
                 if(i != len(subtask_execs)-1 and not next_caret):
-                    s += " "
+                    s += ", "
 
                 s += "\033[39m" # End Color
                 s += "\033[22m" # End Bold
@@ -541,17 +552,19 @@ class Cursor:
             This is the normal movement of the cursor after a successfully
             applying an operator.  
         ''' 
-        # print("advance_subtask", self)
-
-
-
         # self._advance_parent_frames_to_child()
         # curr_frame = self.current_frame
 
         # Beginning with an operator frame, pop up to the parent 
         assert(self.current_frame.is_operator_frame)
+        # print("CF:", self.current_frame)
         task_ind = self.current_frame.task_ind
         curr_frame = self._pop_frame()
+        # curr_frame.current_method_exec.subtask_execs[task_ind].status = ExStatus.SUCCESS
+        # print(" ::", curr_frame, curr_frame.current_method_exec)
+        # print("\t->>", curr_frame.current_method_exec.subtask_execs[task_ind])
+        # print("advance_subtask", self)
+        # curr_frame.subtask_execs[task_ind].status = ExStatus.SUCCESS
 
         while True:
             # Advance to next subtask exececution in current MethodEx
@@ -565,9 +578,16 @@ class Cursor:
 
             # if(curr_frame.current_subtask_exec):
             #     curr_frame.current_subtask_exec.status = ExStatus.SUCCESS
+            
+            # print("\t!>>", curr_frame.current_method_exec.subtask_execs[task_ind])
+            # print("\t cf", curr_frame)
             next_frame = curr_frame.next_frame_after_commit(next_state, task_ind, True)
+
+            # task_ind = curr_frame.task_ind
             
             if(next_frame is not None):
+                # next_frame.current_method_exec.subtask_execs[task_ind].status = ExStatus.SUCCESS
+                
                 # print("SUC BEF:", curr_frame)
                 # print("SUC AFT:", next_frame)
                 if(trace):
@@ -576,7 +596,9 @@ class Cursor:
         
             # Otherwise try popping frame from stack and mark the current
             #  frame's current child as successful.
+            task_ind = curr_frame.task_ind
             next_frame = self._pop_frame()
+            
             # if(curr_frame.current_child_exec):
             #     curr_frame.current_child_exec.status = ExStatus.SUCCESS
             
@@ -587,6 +609,9 @@ class Cursor:
             if(next_frame is None):
                 break
 
+            next_frame.current_method_exec.subtask_execs[task_ind].status = ExStatus.SUCCESS
+            # print("\t:>>", next_frame.current_method_exec.subtask_execs[task_ind])
+
             # If the popped frame is not None mark the calling task as successful
             # self._advance_from_child_commit(next_frame, curr_frame.task_ind,
             #     is_in_progress=not curr_frame.is_operator_frame)
@@ -594,7 +619,7 @@ class Cursor:
             # subtask_execs[curr_frame.task_ind].status = ExStatus.SUCCESS
             
             # print("next_frame:", next_frame)
-            task_ind = curr_frame.task_ind
+            # task_ind = curr_frame.task_ind
             curr_frame = next_frame
         self.current_frame = next_frame
 
@@ -1064,7 +1089,7 @@ class HtnPlanner2:
         # Backtrack or push a nomatch frame if matching fails for any reason.
         if(child_execs is None or len(child_execs) == 0):
             if(push_nomatch_frames):
-                print("NO MATCH FRAME", child_execs)
+                print("NO MATCH FRAME", task_exec, child_execs)
                 cursor.push_nomatch_frame(task_exec, task_ind, child_execs, trace=self.trace)
                 return None, TraceKind.FIRST_SUBTASK
             else:

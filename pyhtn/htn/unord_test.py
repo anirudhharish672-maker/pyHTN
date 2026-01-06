@@ -54,11 +54,11 @@ operators = {
 
 
 
-def setup(domain, state=[{"id" : "1"}]):
+def setup(domain, state=[{"id" : "1"}], args=[]):
     env = MagicMock()
     env.get_state.return_value = state
     planner = HtnPlanner2(
-        tasks = [{'name': 'S', 'args': []}],
+        tasks = [{'name': 'S', 'args': args}],
         domain = domain,
         env = env,
         enable_logging=True
@@ -352,6 +352,163 @@ def test_skip_if():
 
 
 
+rewrite_using_rule = lambda x : x
+multiply_exponents = lambda x : x
+solve_using_power_rule = lambda x : x
+import re
+
+domain_al = {
+    'done':
+        Operator(
+            name=('done'),
+            args=[V('kc')],
+            # preconditions=[
+            #     Fact(start=True),
+            # ],
+            effects=[
+                Fact(
+                    field='done',
+                    value=((re.compile('x'),),),
+                    kc=V('kc'),
+                    answer=True
+                ),
+            ],
+        ),
+
+    'rewrite_using_rule':
+        Operator(
+            name=('rewrite_using_rule'),
+            args=[V('equation'), V('kc')],
+            preconditions=[],
+            effects=[
+                Fact(
+                    field='rewrite_using_rule',
+                    value=(rewrite_using_rule, V('eq')),
+                    kc=V('kc'),
+                    answer=True
+                ),
+            ],
+        ),
+
+    'multiply_exponents':
+        Operator(
+            name=('multiply_exponents'),
+            args=[V('equation'), V('kc')],
+            preconditions=[],
+            effects=[
+                Fact(
+                    field='multiply_exponents',
+                    value=(multiply_exponents, V('eq')),
+                    kc=V('kc'),
+                    answer=True
+                ),
+            ],
+        ),
+
+    'solve_using_power_rule':
+        Operator(
+            name=('solve_using_power_rule'),
+            args=[V('equation'), V('kc')],
+            preconditions=[],
+            effects=[
+                Fact(
+                    field='solve_using_power_rule',
+                    value=(solve_using_power_rule, V('eq')),
+                    kc=V('kc'),
+                    answer=True
+                ),
+            ],
+        ),
+    'rewrite_and_multiply': [
+        Method(
+            name=('rewrite_and_multiply'),
+            args=[V('equation')],
+            preconditions=[],
+            subtasks=[
+                Unord(
+                    Task(
+                        name=('rewrite_using_rule'),
+                        args=[V('equation'), ('rewrite_using_rule',)],
+                    ),
+                    Task(
+                        name=('multiply_exponents'),
+                        args=[V('equation'), ('multiply_exponents',)],
+                    ),
+                )
+            ],
+        ),
+    ],
+    
+    'S': [
+        Method(
+            name=('S'),
+            args=[V('equation')],
+            preconditions=[],
+            subtasks=[
+                Unord(
+                    Task(
+                        name='rewrite_and_multiply',
+                        args=[V('equation')],
+                        skip_if=[Fact(rewrite_and_multiply=False)],
+                    ),
+                    Task(
+                        name='solve_using_power_rule',
+                        args=[V('equation'), ('solve_using_power_rule',)],
+                    ),
+                ),
+                Task(
+                    name=('done'),
+                    args=[('done',)],
+                ),
+            ],
+        ),
+    ],
+}
+
+def test_al_domain():
+    state = [{
+        'id' : "1",
+        'start' : True,
+        'rewrite_and_multiply': True,
+        'equation' : '1+1'
+    }]
+    planner = setup(domain_al, state, ["1+1"])
+    plan_next(planner)
+    check_next(planner, ['rewrite_using_rule', 'multiply_exponents', 'solve_using_power_rule'], 'multiply_exponents')
+    plan_next(planner)
+    check_next(planner, ['rewrite_using_rule'], 'rewrite_using_rule')
+    plan_next(planner)
+    check_next(planner, ['solve_using_power_rule'], 'solve_using_power_rule')
+    plan_next(planner)
+    check_next(planner, ['done'], 'done')
+    check_exhausted(planner)
+
+    planner = setup(domain_al, state, ["1+1"])
+    plan_next(planner)
+    check_next(planner, ['rewrite_using_rule', 'multiply_exponents', 'solve_using_power_rule'], 'rewrite_using_rule')
+    plan_next(planner)
+    check_next(planner, ['multiply_exponents'], 'multiply_exponents')
+    plan_next(planner)
+    check_next(planner, ['solve_using_power_rule'], 'solve_using_power_rule')
+    plan_next(planner)
+    check_next(planner, ['done'], 'done')
+    check_exhausted(planner)
+
+    state = [{
+        'id' : "1",
+        'start' : True,
+        'rewrite_and_multiply': False,
+        'equation' : '1+1'
+    }]
+    planner = setup(domain_al, state, ["1+1"])
+    plan_next(planner)
+    check_next(planner, ['solve_using_power_rule'], 'solve_using_power_rule')
+    plan_next(planner)
+    check_next(planner, ['done'], 'done')
+    check_exhausted(planner)
+    
+
+
     
 if __name__ == "__main__":
     test_basic_unord_skip()
@@ -359,5 +516,6 @@ if __name__ == "__main__":
     test_conditional_empty_methods()
     test_optional_if()
     test_skip_if()
+    test_al_domain()
 
 
